@@ -50,9 +50,11 @@ class XesCmdDecode():
             return str_msg
 
     def get_device_info(self,data):
-        show_str  = " uID  = %d"  % (self.get_dec_uid(data[0:4]))
-        show_str  += " SW  = %d.%d.%d" % (data[4],data[5],data[6])
+        show_str  = " uID  = %d "  % (self.get_dec_uid(data[0:4]))
+        show_str  += " SW  = %d.%d.%d " % (data[4],data[5],data[6])
         # show_str  += " HW  = " + ",".join(data[7:7+15])
+        show_str  += " RF_CH  = %d " % (data[7+15+8])
+        show_str  += " TX_POWER  = %d" % (data[7+15+8+1])
         # print show_str
         return show_str
 
@@ -86,6 +88,7 @@ class XesCmdDecode():
 
 class XesCmdEncode():
     def __init__(self):
+        self.s_seq = 1
         self.get_device_info_msg = [0x01, 0x01, 0x01, 0x13, 0x00, 0x12]
         self.bind_start_msg      = [0x01, 0x01, 0x01, 0x15, 0x00, 0x14]
         self.bind_stop_msg       = [0x01, 0x01, 0x01, 0x17, 0x00, 0x16]
@@ -123,8 +126,24 @@ class XesCmdEncode():
             crc = crc^item
         return crc
 
+    def seq_add(self):
+        self.s_seq = (self.s_seq + 1 ) % 255
+        if self.s_seq == 0:
+            self.s_seq = 1
+
+    def get_ch_cmd_msg(self,ch):
+        ch_msg = [0x01, 0x01, 0x01, 0x11, 0x01]
+        self.seq_add()
+        ch_msg[0] = self.s_seq
+        if ch <= 50:
+            ch_msg.append(ch)
+        ch_msg.append(self.cal_crc(ch_msg))
+        return ch_msg
+
     def get_echo_cmd_msg(self,uid,msg):
         echo_msg = [0x01, 0x01, 0x01, 0x03, 0x34]
+        self.seq_add()
+        echo_msg[0] = self.s_seq
         uid_arr  = self.get_uid_hex_arr(uid)
         for item in uid_arr:
             echo_msg.append(item)

@@ -112,6 +112,7 @@ class DtqUsbHidDebuger(QWidget):
         self.test_button.clicked.connect(self.btn_event_callback)
         self.change_button.clicked.connect(self.btn_event_callback)
         self.bind_button.clicked.connect(self.btn_event_callback)
+        self.ch_button.clicked.connect(self.btn_event_callback)
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_time)
 
@@ -176,6 +177,17 @@ class DtqUsbHidDebuger(QWidget):
                 self.bind_button.setText(u"开始绑定")
                 self.browser.append(u"S :BIND_STOP: %s " % ( self.send_msg ))
 
+        if button_str == u"修改信道":
+            '''
+            关闭HID设备
+            '''
+            if self.alive:
+                ch = int(str(self.ch_lineedit.text()))
+                self.send_msg = u"修改信道"
+                self.usb_hid_send_msg(self.xes_encode.get_ch_cmd_msg(ch))
+                self.bind_button.setText(u"开始绑定")
+                self.browser.append(u"S :SET_CH: %d %s " % (ch,self.send_msg ))
+
         if button_str == u"打开USB设备":
             '''
              打开HID设备
@@ -207,6 +219,7 @@ class DtqUsbHidDebuger(QWidget):
                 self.browser.append(u"关闭设备成功！")
             self.open_button.setText(u"打开USB设备")
 
+
     def usb_hid_scan(self):
         self.usb_list  = hid.find_all_hid_devices()
         if self.usb_list  :
@@ -216,7 +229,7 @@ class DtqUsbHidDebuger(QWidget):
                 self.dev_dict[device_name] = device
 
     def usb_cmd_decode(self,data):
-        print data
+        # print data
         if self.usbhidmonitor:
             if self.usbhidmonitor.cmd_decode.new_uid:
                 self.xes_encode.update_card_id_ack[0] = self.usbhidmonitor.cmd_decode.cur_seq
@@ -240,7 +253,7 @@ class DtqUsbHidDebuger(QWidget):
             for item in self.uid_list:
                 msg = self.xes_encode.get_echo_cmd_msg( item, self.send_msg )
                 self.usb_hid_send_msg( msg )
-                self.browser.append(u"S :ECHO: uID:[%08X] str:%s" % ( item, self.send_msg ))
+                self.browser.append(u"S :ECHO: uID:[%10d] str:%s" % ( item, self.send_msg ))
 
     def usb_hid_send_msg(self,msg):
         print msg
