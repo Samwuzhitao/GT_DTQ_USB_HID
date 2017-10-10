@@ -216,9 +216,15 @@ class DtqUsbHidDebuger(QWidget):
                 self.dev_dict[device_name] = device
 
     def usb_cmd_decode(self,data):
+        print data
         if self.usbhidmonitor:
             if self.usbhidmonitor.cmd_decode.new_uid:
-                self.usb_hid_send_msg(self.xes_encode.update_card_id_ack)
+                self.xes_encode.update_card_id_ack[0] = self.usbhidmonitor.cmd_decode.cur_seq
+                tmp_msg = []
+                for item in self.xes_encode.update_card_id_ack:
+                    tmp_msg.append(item)
+                tmp_msg.append(self.xes_encode.cal_crc(tmp_msg))
+                self.usb_hid_send_msg(tmp_msg)
                 if self.usbhidmonitor.cmd_decode.new_uid not in self.uid_list:
                     self.uid_list.append(self.usbhidmonitor.cmd_decode.new_uid)
                     print self.uid_list
