@@ -19,12 +19,14 @@ class XesCmdDecode():
     def __init__(self):
         self.new_uid = None
         self.cur_seq = None
+        self.cur_cmd = None
         self.ReviceFunSets = {
             0x93 : self.get_device_info,
             0x95 : self.bind_msg_err,
             0x97 : self.bind_msg_err,
             0x83 : self.echo_msg_err,
-            0x16 : self.update_card_info
+            0x16 : self.update_card_info,
+            0x02 : self.update_answer_info
         }
 
     def get_dec_uid(self,uid_arr):
@@ -48,6 +50,7 @@ class XesCmdDecode():
     def xes_cmd_decode(self,data_msg):
         # print "cmd decode"
         self.cur_seq = data_msg[SEQ]
+        self.cur_cmd = data_msg[CMD]
         print "SEQ:%02x" % self.cur_seq
         print "%02X " % data_msg[CMD]
         # print "SRC_MS  :%s" %  self.list_export(data_msg)
@@ -58,7 +61,7 @@ class XesCmdDecode():
             return str_msg
 
     def get_device_info(self,data):
-        show_str  = " uID  = %d "  % (self.uid_negative(self.get_dec_uid(data[0:4])))
+        show_str  = "uID  = %d "  % (self.uid_negative(self.get_dec_uid(data[0:4])))
         show_str  += " SW  = %d.%d.%d " % (data[4],data[5],data[6])
         # show_str  += " HW  = " + ",".join(data[7:7+15])
         show_str  += " RF_CH  = %d " % (data[7+15+8])
@@ -74,7 +77,7 @@ class XesCmdDecode():
             str_err = u"未知设备,请先绑定！"
         if data[0] == 1:
             str_err = u"指令长度非法"
-        show_str  = " Err  = %s"  % str_err
+        show_str  = "Err  = %s"  % str_err
         return show_str
 
     def bind_msg_err(self,data):
@@ -83,14 +86,44 @@ class XesCmdDecode():
             str_err = u"OK!"
         else:
             str_err = u"FIAL!"
-        show_str  = " Err  = %s"  % str_err
+        show_str  = "Err  = %s"  % str_err
         return show_str
 
     def update_card_info(self,data):
         # update_card_id_ack
+        print data
         uid = ((data[0]<<24) | (data[1]<<16) |
                (data[2] << 8) | data[3])
-        show_str  = " UID  = %08X CARD_ID = %d"  % (uid,self.uid_negative(uid))
+        rep_id = ((data[4]<<24) | (data[5]<<16) |
+               (data[6] << 8) | data[7])
+        show_str  = "UID  = %08X CARD_ID = %010d REP_ID = %010d"  % (uid,self.uid_negative(uid),self.uid_negative(rep_id))
+        self.new_uid = uid
+        return show_str
+
+    def update_answer_info(self,data):
+        # update_card_id_ack
+        show_str = update_time = "[%02X%02X-%02X-%02X %02X:%02X:%02X,%X%02X] " % (data[1],data[2],data[3],data[4],data[5],data[6],data[7],data[8],data[9])
+        uid = ((data[10]<<24) | (data[11]<<16) |
+               (data[12] << 8) | data[13])
+        show_str  += "RSSI = %3d CARD_ID = %010d "  % (data[0],self.uid_negative(uid))
+        if data[14] == 1:
+            q_type = u"单题单选"
+        if data[14] == 2:
+            q_type = u"是非判断"
+        if data[14] == 3:
+            q_type = u"抢红包"
+        if data[14] == 4:
+            q_type = u"单题多选"
+        if data[14] == 5:
+            q_type = u"多题单选"
+        if data[14] == 6:
+            q_type = u"通用题型"
+        show_str = show_str + "TYPE =  %s ANSWER: " % q_type
+
+        answer_code = data[15:]
+        for item in answer_code:
+            if item != 0:
+                show_str = show_str + "%02x " % item
         self.new_uid = uid
         return show_str
 
@@ -171,6 +204,20 @@ class XesCmdEncode():
         echo_msg.append(self.cal_crc(echo_msg))
 
         return echo_msg
+
+    def get_question_cmd_msg(self,q_t,msg):
+        que_msg = [0x01, 0x01, 0x01, 0x01, 0x1A, 0x20, 0x17, 0x08, 0x28, 0x17, 0x53, 0x35, 0x06, 0x00]
+        self.seq_add()
+        que_msg[0] = self.s_seq
+        que_msg.append(q_t)
+        msg_arr  = self.get_gbk_hex_arr(msg)
+        for item in msg_arr:
+            que_msg.append(item)
+        for i in range(32):
+            if i > len(que_msg):
+                que_msg.append(0x00)
+        que_msg.append(self.cal_crc(que_msg))
+        return que_msg
 
 if __name__=='__main__':
     uid_arr = [0x01,0x02,0x03,0x04]

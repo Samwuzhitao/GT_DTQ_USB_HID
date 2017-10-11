@@ -66,7 +66,7 @@ class DtqUsbHidDebuger(QWidget):
         self.alive    = False
         # self.xes_decode = XesCmdDecode()
         self.xes_encode = XesCmdEncode()
-        self.setWindowTitle(u"USB HID压力测试工具v1.0")
+        self.setWindowTitle(u"USB HID压力测试工具v1.1")
         self.com_combo=QComboBox(self)
         self.com_combo.setFixedSize(100, 20)
         self.usb_hid_scan()
@@ -87,7 +87,7 @@ class DtqUsbHidDebuger(QWidget):
         self.ch_button=QPushButton(u"修改信道")
 
         self.cmd_label=QLabel(u"DTQ回显:")
-        self.cmd_lineedit = QLineEdit(u'很抱歉！答错了')
+        self.cmd_lineedit = QLineEdit(u'恭喜你！答对了')
         self.change_button=QPushButton(u"发送数据")
         c_hbox = QHBoxLayout()
 
@@ -100,10 +100,31 @@ class DtqUsbHidDebuger(QWidget):
         c_hbox.addWidget(self.cmd_lineedit)
         c_hbox.addWidget(self.change_button)
 
+        self.q_label=QLabel(u"答题功能：")
+        self.q_combo=QComboBox(self)
+        self.q_combo.setFixedSize(110, 20)
+        # self.usb_hid_scan()
+        self.q_combo.addItem(u"单题单选:0x01")
+        self.q_combo.addItem(u"是非判断:0x02")
+        self.q_combo.addItem(u"抢红包  :0x03")
+        self.q_combo.addItem(u"单题多选:0x04")
+        self.q_combo.addItem(u"多题单选:0x05")
+        self.q_combo.addItem(u"通用题型:0x06")
+        self.q_lineedit = QLineEdit(u'单题单选测试1')
+        self.q_button=QPushButton(u"发送题目")
+
+        q_hbox = QHBoxLayout()
+
+        q_hbox.addWidget(self.q_label)
+        q_hbox.addWidget(self.q_combo)
+        q_hbox.addWidget(self.q_lineedit)
+        q_hbox.addWidget(self.q_button)
+
         self.browser = QTextBrowser ()
         box = QVBoxLayout()
         box.addLayout(e_hbox)
         box.addLayout(c_hbox)
+        box.addLayout(q_hbox)
         box.addWidget(self.browser)
         self.setLayout(box)
         self.resize(600, 400 )
@@ -113,13 +134,21 @@ class DtqUsbHidDebuger(QWidget):
         self.change_button.clicked.connect(self.btn_event_callback)
         self.bind_button.clicked.connect(self.btn_event_callback)
         self.ch_button.clicked.connect(self.btn_event_callback)
+        self.q_button.clicked.connect(self.btn_event_callback)
+        self.q_combo.currentIndexChanged.connect(self.update_q_lineedit)
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_time)
+
+# self.q_lineedit.setText(q_type)
 
     def update_time(self):
         self.send_cnt =self.send_cnt + 1
         self.send_msg = u"测试次数：%d" % self.send_cnt
         self.usb_hid_echo_data()
+
+    def update_q_lineedit(self):
+        q_type =  unicode(self.q_combo.currentText())
+        self.q_lineedit.setText(q_type)
 
     def btn_event_callback(self):
         button = self.sender()
@@ -157,6 +186,31 @@ class DtqUsbHidDebuger(QWidget):
                 self.send_msg = cur_msg
             self.usb_hid_echo_data()
 
+        if button_str == u"发送题目":
+            '''
+            改变发送数据的内容
+            '''
+            que_t = 1
+            q_type =  unicode(self.q_combo.currentText())
+            if q_type == u"单题单选:0x01":
+                que_t = 1
+            if q_type == u"是非判断:0x02":
+                que_t = 2
+            if q_type == u"抢红包  :0x03":
+                que_t = 3
+            if q_type == u"单题多选:0x04":
+                que_t = 4
+            if q_type == u"多题单选:0x05":
+                que_t = 5
+            if q_type == u"通用题型:0x06":
+                que_t = 6
+
+            if self.alive:
+                cur_msg   = unicode(self.q_lineedit.text())
+                msg = self.xes_encode.get_question_cmd_msg( que_t, cur_msg )
+                self.usb_hid_send_msg( msg )
+                self.browser.append(u"S : 发送题目 : %s : %s " % ( q_type, cur_msg ))
+
         if button_str == u"开始绑定":
             '''
             发送开始绑定指令
@@ -165,7 +219,7 @@ class DtqUsbHidDebuger(QWidget):
                 self.send_msg = u"绑定开始！请将需要测试的答题器刷卡绑定！"
                 self.usb_hid_send_msg(self.xes_encode.bind_start_msg)
                 self.bind_button.setText(u"停止绑定")
-                self.browser.append(u"S :BIND_START: %s " % ( self.send_msg ))
+                self.browser.append(u"S : BIND_START: %s " % ( self.send_msg ))
 
         if button_str == u"停止绑定":
             '''
@@ -175,7 +229,7 @@ class DtqUsbHidDebuger(QWidget):
                 self.send_msg = u"绑定结束！此时刷卡无效"
                 self.usb_hid_send_msg(self.xes_encode.bind_stop_msg)
                 self.bind_button.setText(u"开始绑定")
-                self.browser.append(u"S :BIND_STOP: %s " % ( self.send_msg ))
+                self.browser.append(u"S : BIND_STOP: %s " % ( self.send_msg ))
 
         if button_str == u"修改信道":
             '''
@@ -186,7 +240,7 @@ class DtqUsbHidDebuger(QWidget):
                 self.send_msg = u"修改信道"
                 self.usb_hid_send_msg(self.xes_encode.get_ch_cmd_msg(ch))
                 self.bind_button.setText(u"开始绑定")
-                self.browser.append(u"S :SET_CH: %d %s " % (ch,self.send_msg ))
+                self.browser.append(u"S : SET_CH: %d %s " % (ch,self.send_msg ))
 
         if button_str == u"打开USB设备":
             '''
@@ -233,6 +287,7 @@ class DtqUsbHidDebuger(QWidget):
         if self.usbhidmonitor:
             if self.usbhidmonitor.cmd_decode.new_uid:
                 self.xes_encode.update_card_id_ack[0] = self.usbhidmonitor.cmd_decode.cur_seq
+                self.xes_encode.update_card_id_ack[3] = self.usbhidmonitor.cmd_decode.cur_cmd + 0x80
                 tmp_msg = []
                 for item in self.xes_encode.update_card_id_ack:
                     tmp_msg.append(item)
@@ -254,7 +309,7 @@ class DtqUsbHidDebuger(QWidget):
                 print item
                 msg = self.xes_encode.get_echo_cmd_msg( item, self.send_msg )
                 self.usb_hid_send_msg( msg )
-                self.browser.append(u"S :ECHO: CARD_ID:[%10d] str:%s" % ( self.xes_encode.uid_negative(item), self.send_msg ))
+                self.browser.append(u"S : ECHO: CARD_ID:[%10d] str:%s" % ( self.xes_encode.uid_negative(item), self.send_msg ))
 
     def usb_hid_send_msg(self,msg):
         print msg
