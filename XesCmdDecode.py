@@ -28,8 +28,16 @@ class XesCmdDecode():
         }
 
     def get_dec_uid(self,uid_arr):
-        return (uid_arr[0] | (uid_arr[1]<<8) |
-               (uid_arr[2] << 16) | uid_arr[3] << 24)
+        # return (uid_arr[0] | (uid_arr[1]<<8) |
+        #        (uid_arr[2] << 16) | uid_arr[3] << 24)
+        return ((uid_arr[0] << 24)| (uid_arr[1]<<16) |
+               (uid_arr[2] << 8) | uid_arr[3] )
+
+    def uid_negative(self,uid):
+        return (((uid & 0xFF000000)>>24) |
+               ((uid & 0x00FF0000)>>8)  |
+               ((uid & 0x0000FF00)<<8)  |
+               ((uid & 0x000000FF)<<24))
 
     def list_export(self,data):
         str_data = ""
@@ -50,7 +58,7 @@ class XesCmdDecode():
             return str_msg
 
     def get_device_info(self,data):
-        show_str  = " uID  = %d "  % (self.get_dec_uid(data[0:4]))
+        show_str  = " uID  = %d "  % (self.uid_negative(self.get_dec_uid(data[0:4])))
         show_str  += " SW  = %d.%d.%d " % (data[4],data[5],data[6])
         # show_str  += " HW  = " + ",".join(data[7:7+15])
         show_str  += " RF_CH  = %d " % (data[7+15+8])
@@ -82,7 +90,7 @@ class XesCmdDecode():
         # update_card_id_ack
         uid = ((data[0]<<24) | (data[1]<<16) |
                (data[2] << 8) | data[3])
-        show_str  = " UID  = %08X"  % uid
+        show_str  = " UID  = %08X CARD_ID = %d"  % (uid,self.uid_negative(uid))
         self.new_uid = uid
         return show_str
 
@@ -98,6 +106,12 @@ class XesCmdEncode():
             u"绑定开始指令" : self.bind_start_msg,
             u"绑定结束指令" : self.bind_stop_msg,
         }
+
+    def uid_negative(self,uid):
+        return (((uid & 0xFF000000)>>24) |
+               ((uid & 0x00FF0000)>>8)  |
+               ((uid & 0x0000FF00)<<8)  |
+               ((uid & 0x000000FF)<<24))
 
     def get_gbk_hex_arr(self,msg):
         msg_arr = []

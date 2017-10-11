@@ -251,9 +251,10 @@ class DtqUsbHidDebuger(QWidget):
     def usb_hid_echo_data(self):
         if self.uid_list:
             for item in self.uid_list:
+                print item
                 msg = self.xes_encode.get_echo_cmd_msg( item, self.send_msg )
                 self.usb_hid_send_msg( msg )
-                self.browser.append(u"S :ECHO: uID:[%10d] str:%s" % ( item, self.send_msg ))
+                self.browser.append(u"S :ECHO: CARD_ID:[%10d] str:%s" % ( self.xes_encode.uid_negative(item), self.send_msg ))
 
     def usb_hid_send_msg(self,msg):
         print msg
