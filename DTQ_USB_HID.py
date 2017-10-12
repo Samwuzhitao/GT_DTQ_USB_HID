@@ -36,11 +36,11 @@ logging.basicConfig ( # 配置日志输出的方式及格式
 )
 
 class UsbHidMontior(QThread):
-    def __init__(self,parent=None):
+    def __init__(self,uid_list,parent=None):
         super(UsbHidMontior,self).__init__(parent)
         self.working = True
         self.new_msg = None
-        self.cmd_decode = XesCmdDecode()
+        self.cmd_decode = XesCmdDecode(uid_list)
 
     def __del__(self):
         self.working = False
@@ -160,6 +160,9 @@ class DtqUsbHidDebuger(QWidget):
             开始压力测试
             '''
             if self.alive:
+                self.send_msg = u"查看白名单"
+                self.usb_hid_send_msg(self.xes_encode.check_wl)
+                self.browser.append(u"S : CHECK_WL: %s " % ( self.send_msg ))
                 self.test_button.setText(u"停止压力测试")
                 self.timer.start(1000)
 
@@ -253,7 +256,7 @@ class DtqUsbHidDebuger(QWidget):
                 self.report = self.dev_dict[usb_port].find_output_reports()
                 self.alive  = True
                 # print self.report
-                self.usbhidmonitor = UsbHidMontior()
+                self.usbhidmonitor = UsbHidMontior(self.uid_list)
                 self.connect(self.usbhidmonitor,SIGNAL('usb_r_msg(QString)'),self.usb_cmd_decode)
                 # print self.dev_dict[usb_port]
                 self.usbhidmonitor.start()
@@ -309,7 +312,7 @@ class DtqUsbHidDebuger(QWidget):
                 print item
                 msg = self.xes_encode.get_echo_cmd_msg( item, self.send_msg )
                 self.usb_hid_send_msg( msg )
-                self.browser.append(u"S : ECHO: CARD_ID:[%10d] str:%s" % ( self.xes_encode.uid_negative(item), self.send_msg ))
+                self.browser.append(u"S : ECHO: CARD_ID:[%010d] str:%s" % ( self.xes_encode.uid_negative(item), self.send_msg ))
 
     def usb_hid_send_msg(self,msg):
         print msg

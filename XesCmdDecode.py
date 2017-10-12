@@ -16,22 +16,37 @@ DATA_S = 6
 
 
 class XesCmdDecode():
-    def __init__(self):
+    def __init__(self,uid_list):
         self.new_uid = None
         self.cur_seq = None
         self.cur_cmd = None
+        self.wl_list = uid_list
+        self.cmd_arr = []
         self.ReviceFunSets = {
             0x93 : self.get_device_info,
             0x95 : self.bind_msg_err,
             0x97 : self.bind_msg_err,
             0x83 : self.echo_msg_err,
             0x16 : self.update_card_info,
-            0x02 : self.update_answer_info
+            0x02 : self.update_answer_info,
+            0x98 : self.check_wl_info
         }
 
+    def check_wl_info(self,data):
+        # check_wl_info
+        pack_len = len(data)
+        i = 0
+        show_str = "WL: WL_LEN = %d " % (pack_len/4)
+        while i < pack_len/4:
+            tmp_uid = ((data[4*i+0] << 24)| (data[1+4*i]<<16) | (data[2+4*i] << 8) | data[3+4*i] )
+            i = i + 1
+            if tmp_uid not in self.wl_list:
+                self.wl_list.append(tmp_uid)
+                show_str += " uID:%010d " % self.uid_negative(tmp_uid)
+        print show_str
+        return show_str
+
     def get_dec_uid(self,uid_arr):
-        # return (uid_arr[0] | (uid_arr[1]<<8) |
-        #        (uid_arr[2] << 16) | uid_arr[3] << 24)
         return ((uid_arr[0] << 24)| (uid_arr[1]<<16) |
                (uid_arr[2] << 8) | uid_arr[3] )
 
@@ -51,14 +66,23 @@ class XesCmdDecode():
         # print "cmd decode"
         self.cur_seq = data_msg[SEQ]
         self.cur_cmd = data_msg[CMD]
-        print "SEQ:%02x" % self.cur_seq
-        print "%02X " % data_msg[CMD]
+
+        print "SEQ:%02x CMD:%02X" % ( self.cur_seq, data_msg[CMD] )
+        str_data = ""
+        for item in data_msg:
+            str_data += "%02X " % item
+        print str_data
         # print "SRC_MS  :%s" %  self.list_export(data_msg)
         value_msg = data_msg[DATA_S:DATA_S+data_msg[LEN]]
+        for item in value_msg:
+            self.cmd_arr.append(item)
         # print "VALUE_MS:%s" %  self.list_export(value_msg)
         if self.ReviceFunSets.has_key(data_msg[CMD]):
-            str_msg = self.ReviceFunSets[data_msg[CMD]](value_msg)
-            return str_msg
+            if data_msg[NUM] == data_msg[INDEX]:
+                # self.cmd_arr
+                str_msg = self.ReviceFunSets[data_msg[CMD]](self.cmd_arr)
+                self.cmd_arr = []
+                return str_msg
 
     def get_device_info(self,data):
         show_str  = "uID  = %d "  % (self.uid_negative(self.get_dec_uid(data[0:4])))
@@ -98,6 +122,8 @@ class XesCmdDecode():
                (data[6] << 8) | data[7])
         show_str  = "UID  = %08X CARD_ID = %010d REP_ID = %010d"  % (uid,self.uid_negative(uid),self.uid_negative(rep_id))
         self.new_uid = uid
+        # if uid not in self.wl_list:
+        #     self.wl_list.append(uid)
         return show_str
 
     def update_answer_info(self,data):
@@ -134,6 +160,7 @@ class XesCmdEncode():
         self.bind_start_msg      = [0x01, 0x01, 0x01, 0x15, 0x00, 0x14]
         self.bind_stop_msg       = [0x01, 0x01, 0x01, 0x17, 0x00, 0x16]
         self.update_card_id_ack  = [0x01, 0x01, 0x01, 0x96, 0x00]
+        self.check_wl            = [0x01, 0x01, 0x01, 0x18, 0x00, 0x19]
         self.s_cmd_fun = {
             u"查看设备信息" : self.get_device_info_msg,
             u"绑定开始指令" : self.bind_start_msg,
