@@ -77,7 +77,6 @@ class DtqUsbHidDebuger(QWidget):
         e_hbox = QHBoxLayout()
         e_hbox.addWidget(self.com_combo)
         e_hbox.addWidget(self.open_button)
-        # e_hbox.addWidget(self.bind_button)
         e_hbox.addWidget(self.test_button)
         e_hbox.addWidget(self.clear_button)
 
@@ -139,8 +138,6 @@ class DtqUsbHidDebuger(QWidget):
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_time)
 
-# self.q_lineedit.setText(q_type)
-
     def update_time(self):
         self.send_cnt =self.send_cnt + 1
         self.send_msg = u"测试次数：%d" % self.send_cnt
@@ -160,11 +157,12 @@ class DtqUsbHidDebuger(QWidget):
             开始压力测试
             '''
             if self.alive:
+                # self.uid_list = []
                 self.send_msg = u"查看白名单"
                 self.usb_hid_send_msg(self.xes_encode.check_wl)
                 self.browser.append(u"S : CHECK_WL: %s " % ( self.send_msg ))
                 self.test_button.setText(u"停止压力测试")
-                self.timer.start(1000)
+                self.timer.start(2000)
 
         if button_str == u"停止压力测试":
             '''
@@ -298,7 +296,7 @@ class DtqUsbHidDebuger(QWidget):
                 self.usb_hid_send_msg(tmp_msg)
                 if self.usbhidmonitor.cmd_decode.new_uid not in self.uid_list:
                     self.uid_list.append(self.usbhidmonitor.cmd_decode.new_uid)
-                    print self.uid_list
+                    # print self.uid_list
                 self.usbhidmonitor.cmd_decode.new_uid = None
         self.browser.append(u"R : {0}".format(data))
         logging.debug(u"接收数据：R : {0}".format(data))
@@ -309,13 +307,13 @@ class DtqUsbHidDebuger(QWidget):
     def usb_hid_echo_data(self):
         if self.uid_list:
             for item in self.uid_list:
-                print item
+                # print item
                 msg = self.xes_encode.get_echo_cmd_msg( item, self.send_msg )
                 self.usb_hid_send_msg( msg )
                 self.browser.append(u"S : ECHO: CARD_ID:[%010d] str:%s" % ( self.xes_encode.uid_negative(item), self.send_msg ))
 
     def usb_hid_send_msg(self,msg):
-        print msg
+        # print msg
 
         tmp_msg = []
         for item in msg:
@@ -333,7 +331,7 @@ class DtqUsbHidDebuger(QWidget):
         for item in tmp_msg:
             str_msg = str_msg + "%02X " % item
 
-        print str_msg
+        # print str_msg
         if self.report:
             self.report[0].set_raw_data(tmp_msg)
             self.report[0].send()

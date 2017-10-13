@@ -51,10 +51,8 @@ class XesCmdDecode():
                (uid_arr[2] << 8) | uid_arr[3] )
 
     def uid_negative(self,uid):
-        return (((uid & 0xFF000000)>>24) |
-               ((uid & 0x00FF0000)>>8)  |
-               ((uid & 0x0000FF00)<<8)  |
-               ((uid & 0x000000FF)<<24))
+        return (((uid & 0xFF000000)>>24) | ((uid & 0x00FF0000)>>8)  |
+                ((uid & 0x0000FF00)<<8)  | ((uid & 0x000000FF)<<24))
 
     def list_export(self,data):
         str_data = ""
@@ -63,23 +61,19 @@ class XesCmdDecode():
         return str_data
 
     def xes_cmd_decode(self,data_msg):
-        # print "cmd decode"
         self.cur_seq = data_msg[SEQ]
         self.cur_cmd = data_msg[CMD]
-
-        print "SEQ:%02x CMD:%02X" % ( self.cur_seq, data_msg[CMD] )
+        # print "SEQ:%02x CMD:%02X" % ( self.cur_seq, data_msg[CMD] )
         str_data = ""
         for item in data_msg:
             str_data += "%02X " % item
         print str_data
-        # print "SRC_MS  :%s" %  self.list_export(data_msg)
-        value_msg = data_msg[DATA_S:DATA_S+data_msg[LEN]]
-        for item in value_msg:
-            self.cmd_arr.append(item)
-        # print "VALUE_MS:%s" %  self.list_export(value_msg)
+
         if self.ReviceFunSets.has_key(data_msg[CMD]):
+            value_msg = data_msg[DATA_S:DATA_S+data_msg[LEN]]
+            for item in value_msg:
+                self.cmd_arr.append(item)
             if data_msg[NUM] == data_msg[INDEX]:
-                # self.cmd_arr
                 str_msg = self.ReviceFunSets[data_msg[CMD]](self.cmd_arr)
                 self.cmd_arr = []
                 return str_msg
@@ -87,7 +81,6 @@ class XesCmdDecode():
     def get_device_info(self,data):
         show_str  = "uID  = %d "  % (self.uid_negative(self.get_dec_uid(data[0:4])))
         show_str  += " SW  = %d.%d.%d " % (data[4],data[5],data[6])
-        # show_str  += " HW  = " + ",".join(data[7:7+15])
         show_str  += " RF_CH  = %d " % (data[7+15+8])
         show_str  += " TX_POWER  = %d" % (data[7+15+8+1])
         # print show_str
@@ -95,6 +88,7 @@ class XesCmdDecode():
 
     def echo_msg_err(self,data):
         # print data
+        str_err = ""
         if data[0] == 0:
             str_err = u"OK!"
         if data[0] == 2:
@@ -122,16 +116,16 @@ class XesCmdDecode():
                (data[6] << 8) | data[7])
         show_str  = "UID  = %08X CARD_ID = %010d REP_ID = %010d"  % (uid,self.uid_negative(uid),self.uid_negative(rep_id))
         self.new_uid = uid
-        # if uid not in self.wl_list:
-        #     self.wl_list.append(uid)
         return show_str
 
     def update_answer_info(self,data):
         # update_card_id_ack
+        # print data
         show_str = update_time = "[%02X%02X-%02X-%02X %02X:%02X:%02X,%X%02X] " % (data[1],data[2],data[3],data[4],data[5],data[6],data[7],data[8],data[9])
-        uid = ((data[10]<<24) | (data[11]<<16) |
+        uid = ((data[10]<<24)  | (data[11]<<16) |
                (data[12] << 8) | data[13])
         show_str  += "RSSI = %3d CARD_ID = %010d "  % (data[0],self.uid_negative(uid))
+        q_type = ""
         if data[14] == 1:
             q_type = u"单题单选"
         if data[14] == 2:
@@ -168,10 +162,8 @@ class XesCmdEncode():
         }
 
     def uid_negative(self,uid):
-        return (((uid & 0xFF000000)>>24) |
-               ((uid & 0x00FF0000)>>8)  |
-               ((uid & 0x0000FF00)<<8)  |
-               ((uid & 0x000000FF)<<24))
+        return (((uid & 0xFF000000)>>24) | ((uid & 0x00FF0000)>>8)  |
+                ((uid & 0x0000FF00)<<8)  | ((uid & 0x000000FF)<<24))
 
     def get_gbk_hex_arr(self,msg):
         msg_arr = []
