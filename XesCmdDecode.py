@@ -27,6 +27,9 @@ class XesCmdDecode():
             0x95 : self.bind_msg_err,
             0x97 : self.bind_msg_err,
             0x83 : self.echo_msg_err,
+            0x91 : self.bind_msg_err,
+            0x81 : self.bind_msg_err,
+            0x94 : self.bind_msg_err,
             0x16 : self.update_card_info,
             0x02 : self.update_answer_info,
             0x98 : self.check_wl_info
@@ -42,7 +45,7 @@ class XesCmdDecode():
             i = i + 1
             if tmp_uid not in self.wl_list:
                 self.wl_list.append(tmp_uid)
-                show_str += " uID:%010d " % self.uid_negative(tmp_uid)
+            show_str += " uID:%010d " % self.uid_negative(tmp_uid)
         print show_str
         return show_str
 
@@ -155,6 +158,7 @@ class XesCmdEncode():
         self.bind_stop_msg       = [0x01, 0x01, 0x01, 0x17, 0x00, 0x16]
         self.update_card_id_ack  = [0x01, 0x01, 0x01, 0x96, 0x00]
         self.check_wl            = [0x01, 0x01, 0x01, 0x18, 0x00, 0x19]
+        self.clear_dev_info_msg  = [0x01, 0x01, 0x01, 0x14, 0x00, 0x15]
         self.s_cmd_fun = {
             u"查看设备信息" : self.get_device_info_msg,
             u"绑定开始指令" : self.bind_start_msg,
@@ -201,8 +205,8 @@ class XesCmdEncode():
         ch_msg = [0x01, 0x01, 0x01, 0x11, 0x01]
         self.seq_add()
         ch_msg[0] = self.s_seq
-        if ch <= 50:
-            ch_msg.append(ch)
+        # //if ch <= 50:
+        ch_msg.append(ch & 0xFF)
         ch_msg.append(self.cal_crc(ch_msg))
         return ch_msg
 
@@ -225,17 +229,21 @@ class XesCmdEncode():
         return echo_msg
 
     def get_question_cmd_msg(self,q_t,msg):
-        que_msg = [0x01, 0x01, 0x01, 0x01, 0x1A, 0x20, 0x17, 0x08, 0x28, 0x17, 0x53, 0x35, 0x06, 0x00]
+        que_msg = [0x01, 0x01, 0x01, 0x01, 0x0A, 0x20, 0x17, 0x08, 0x28, 0x17, 0x53, 0x35, 0x06, 0x00]
         self.seq_add()
         que_msg[0] = self.s_seq
         que_msg.append(q_t)
         msg_arr  = self.get_gbk_hex_arr(msg)
-        for item in msg_arr:
-            que_msg.append(item)
-        for i in range(32):
-            if i > len(que_msg):
-                que_msg.append(0x00)
+        msg_arr_len = len(msg_arr)
+        if msg_arr_len > 0:
+            que_msg[4] = 0x1A
+            for item in msg_arr:
+                que_msg.append(item)
+            for i in range(32):
+                if i > len(que_msg):
+                    que_msg.append(0x00)
         que_msg.append(self.cal_crc(que_msg))
+        # print que_msg
         return que_msg
 
 if __name__=='__main__':

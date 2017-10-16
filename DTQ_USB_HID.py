@@ -66,7 +66,7 @@ class DtqUsbHidDebuger(QWidget):
         self.alive    = False
         # self.xes_decode = XesCmdDecode()
         self.xes_encode = XesCmdEncode()
-        self.setWindowTitle(u"USB HID压力测试工具v1.1")
+        self.setWindowTitle(u"USB HID压力测试工具v1.2")
         self.com_combo=QComboBox(self)
         self.com_combo.setFixedSize(100, 20)
         self.usb_hid_scan()
@@ -74,6 +74,11 @@ class DtqUsbHidDebuger(QWidget):
         self.clear_button=QPushButton(u"清空数据")
         self.test_button=QPushButton(u"开始压力测试")
         self.bind_button=QPushButton(u"开始绑定")
+
+        self.check_conf_button=QPushButton(u"查看配置")
+        self.clear_conf_button=QPushButton(u"清除配置")
+        self.check_wl_button=QPushButton(u"查看白名单")
+
         e_hbox = QHBoxLayout()
         e_hbox.addWidget(self.com_combo)
         e_hbox.addWidget(self.open_button)
@@ -82,10 +87,9 @@ class DtqUsbHidDebuger(QWidget):
 
         self.ch_label=QLabel(u"设置信道：")
         self.ch_lineedit = QLineEdit(u'1')
-        self.ch_lineedit.setFixedWidth(30)
         self.ch_button=QPushButton(u"修改信道")
 
-        self.cmd_label=QLabel(u"DTQ回显:")
+        self.cmd_label=QLabel(u"回显功能：")
         self.cmd_lineedit = QLineEdit(u'恭喜你！答对了')
         self.change_button=QPushButton(u"发送数据")
         c_hbox = QHBoxLayout()
@@ -94,14 +98,18 @@ class DtqUsbHidDebuger(QWidget):
         c_hbox.addWidget(self.ch_lineedit)
         c_hbox.addWidget(self.ch_button)
         c_hbox.addWidget(self.bind_button)
+        c_hbox.addWidget(self.check_conf_button)
+        c_hbox.addWidget(self.clear_conf_button)
+        c_hbox.addWidget(self.check_wl_button)
 
-        c_hbox.addWidget(self.cmd_label)
-        c_hbox.addWidget(self.cmd_lineedit)
-        c_hbox.addWidget(self.change_button)
+        t_hbox = QHBoxLayout()
+        t_hbox.addWidget(self.cmd_label)
+        t_hbox.addWidget(self.cmd_lineedit)
+        t_hbox.addWidget(self.change_button)
 
         self.q_label=QLabel(u"答题功能：")
         self.q_combo=QComboBox(self)
-        self.q_combo.setFixedSize(110, 20)
+        self.q_combo.setFixedSize(105, 20)
         # self.usb_hid_scan()
         self.q_combo.addItem(u"单题单选:0x01")
         self.q_combo.addItem(u"是非判断:0x02")
@@ -121,9 +129,12 @@ class DtqUsbHidDebuger(QWidget):
 
         self.browser = QTextBrowser ()
         box = QVBoxLayout()
+
         box.addLayout(e_hbox)
+
         box.addLayout(c_hbox)
         box.addLayout(q_hbox)
+        box.addLayout(t_hbox)
         box.addWidget(self.browser)
         self.setLayout(box)
         self.resize(600, 400 )
@@ -134,6 +145,11 @@ class DtqUsbHidDebuger(QWidget):
         self.bind_button.clicked.connect(self.btn_event_callback)
         self.ch_button.clicked.connect(self.btn_event_callback)
         self.q_button.clicked.connect(self.btn_event_callback)
+
+        self.check_conf_button.clicked.connect(self.btn_event_callback)
+        self.clear_conf_button.clicked.connect(self.btn_event_callback)
+        self.check_wl_button.clicked.connect(self.btn_event_callback)
+
         self.q_combo.currentIndexChanged.connect(self.update_q_lineedit)
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_time)
@@ -157,10 +173,6 @@ class DtqUsbHidDebuger(QWidget):
             开始压力测试
             '''
             if self.alive:
-                # self.uid_list = []
-                self.send_msg = u"查看白名单"
-                self.usb_hid_send_msg(self.xes_encode.check_wl)
-                self.browser.append(u"S : CHECK_WL: %s " % ( self.send_msg ))
                 self.test_button.setText(u"停止压力测试")
                 self.timer.start(2000)
 
@@ -260,7 +272,7 @@ class DtqUsbHidDebuger(QWidget):
                 self.usbhidmonitor.start()
                 self.browser.append(u"打开设备成功！")
                 self.open_button.setText(u"关闭USB设备")
-                self.usb_hid_send_msg(self.xes_encode.get_device_info_msg)
+
 
         if button_str == u"关闭USB设备":
             '''
@@ -274,6 +286,34 @@ class DtqUsbHidDebuger(QWidget):
                 self.browser.append(u"关闭设备成功！")
             self.open_button.setText(u"打开USB设备")
 
+        if button_str == u"查看配置":
+            '''
+            查看设备信息
+            '''
+            if self.alive:
+                self.send_msg = u"查看设备信息"
+                self.usb_hid_send_msg(self.xes_encode.get_device_info_msg)
+                self.browser.append(u"S : GET_DEVICE_INFO: %s " % ( self.send_msg ))
+
+
+        if button_str == u"清除配置":
+            '''
+            查看设备信息
+            '''
+            if self.alive:
+                self.send_msg = u"清除配置信息"
+                self.usb_hid_send_msg(self.xes_encode.clear_dev_info_msg)
+                self.browser.append(u"S : CLEAR_DEV_INFO: %s " % ( self.send_msg ))
+                self.usbhidmonitor.cmd_decode.wl_list = []
+
+        if button_str == u"查看白名单":
+            '''
+            查看设备信息
+            '''
+            if self.alive:
+                self.send_msg = u"查看白名单"
+                self.usb_hid_send_msg(self.xes_encode.check_wl)
+                self.browser.append(u"S : CHECK_WL: %s " % ( self.send_msg ))
 
     def usb_hid_scan(self):
         self.usb_list  = hid.find_all_hid_devices()
