@@ -23,7 +23,9 @@ class XesCmdDecode():
         self.wl_dict = {}
         self.answer_update_dict = {}
         self.card_update_dict   = {}
-        self.cmd_arr = []
+        self.test_pra_dict      = {}
+        self.par_c_dict     = {}
+        self.cmd_arr = {}
         self.echo_cmd_list = []
         self.card_cmd_list = []
         self.ReviceFunSets = {
@@ -125,6 +127,20 @@ class XesCmdDecode():
 
         return not_same_pack
 
+    def xes_cmd_comp(self,data_msg):
+        value_msg = data_msg[DATA_S:DATA_S+data_msg[LEN]]
+        self.cmd_arr[data_msg[INDEX]] = []
+        for item in value_msg:
+            self.cmd_arr[data_msg[INDEX]].append(item)
+        if data_msg[NUM] == len(self.cmd_arr):
+            cmd_arr = []
+            for arr_index in range(1,len(self.cmd_arr)+1):
+                print arr_index,
+                print self.cmd_arr[arr_index]
+                for item in self.cmd_arr[arr_index]:
+                    cmd_arr.append(item)
+            return cmd_arr
+
     def xes_cmd_decode(self,data_msg):
         self.cur_seq = data_msg[SEQ]
         self.cur_cmd = data_msg[CMD]
@@ -132,16 +148,25 @@ class XesCmdDecode():
             print "NEW_PACK"
             if self.ReviceFunSets.has_key(data_msg[CMD]):
                 value_msg = data_msg[DATA_S:DATA_S+data_msg[LEN]]
-                for item in value_msg:
-                    self.cmd_arr.append(item)
-                if data_msg[NUM] == data_msg[INDEX]:
-                    str_msg = self.ReviceFunSets[data_msg[CMD]](self.cmd_arr)
-                    self.cmd_arr = []
+                if data_msg[NUM] == 1:
+                    # print "NUM:%d INDEX:%d " % (data_msg[NUM],data_msg[INDEX])
+                    # print value_msg
+                    str_msg = self.ReviceFunSets[data_msg[CMD]]( value_msg )
                     return str_msg
+                else:
+                    # print "NUM:%d INDEX:%d " % (data_msg[NUM],data_msg[INDEX])
+                    cmd = self.xes_cmd_comp( data_msg )
+                    if cmd:
+                        str_msg = self.ReviceFunSets[data_msg[CMD]](cmd)
+                        self.cmd_arr = {}
+                        if str_msg:
+                            return str_msg
         else:
             print "OLD_PACK "
 
+
     def get_device_info(self,data):
+        # print data
         show_str  = "uID  = %d "  % (self.uid_negative(self.get_dec_uid(data[0:4])))
         show_str  += " SW  = %d.%d.%d " % (data[4],data[5],data[6])
         show_str  += " RF_CH  = %d " % (data[7+15+8])
@@ -191,9 +216,19 @@ class XesCmdDecode():
 
         show_str  += "RSSI:%3d uID:%010d "  % (data[0],self.uid_negative(uid))
 
-        key_cnt  = ((data[17]<<24) | (data[16]<<16) | (data[15] << 8) | data[14])
-        echo_cnt = ((data[21]<<24) | (data[20]<<16) | (data[19] << 8) | data[18])
-        show_str  += "KEY_CNT:%d ECHO_CNT:%d "  % (key_cnt,echo_cnt)
+        press_cnt    = ((data[17]<<24) | (data[16]<<16) | (data[15] << 8) | data[14])
+        press_ok_cnt = ((data[21]<<24) | (data[20]<<16) | (data[19] << 8) | data[18])
+        key_cnt      = ((data[25]<<24) | (data[24]<<16) | (data[23] << 8) | data[22])
+        echo_cnt     = ((data[29]<<24) | (data[28]<<16) | (data[27] << 8) | data[26])
+        show_str  += "PRESS_CNT:%d PRESS_OK_CNT:%d KEY_CNT:%d ECHO_CNT:%d "  % (press_cnt,press_ok_cnt,key_cnt,echo_cnt)
+        LOST_str = ""
+        if self.wl_dict.has_key(uid):
+            if self.wl_dict[uid] + 1 != key_cnt:
+                LOST_str = " LOST PACK! "
+
+
+        cur_cmd_dict = {}
+        cur_cmd_dict[u"uid"] = uid
 
         if key_cnt == 1:
             self.wl_dict[uid] = 1
@@ -201,22 +236,54 @@ class XesCmdDecode():
             if self.wl_dict.has_key(uid):
                 self.wl_dict[uid] = self.wl_dict[uid] + 1
             else:
+                pra_s_dict = {}
                 self.wl_dict[uid] = key_cnt
+                # self.cal_press_dict[uid] = key_cnt
+                pra_s_dict[u"uid"]   = uid
+                pra_s_dict[u"r_s"]   = key_cnt
+                pra_s_dict[u"k_s"]   = key_cnt
+                pra_s_dict[u"e_s"]   = echo_cnt
+                pra_s_dict[u"p_s"]   = press_cnt
+                pra_s_dict[u"p_o_s"] = press_ok_cnt
+                self.test_pra_dict[uid] = pra_s_dict
 
-        show_str = show_str + "TYPE:%02X ANSWER: " % data[22]
 
-        answer_code = data[23:]
+        show_str = show_str + "TYPE:%02X ANSWER: " % data[30]
+
+        answer_code = data[31:]
         for item in answer_code:
             if item != 0:
                 show_str = show_str + "%02x " % item
 
-        cur_cmd_dict = {}
-        cur_cmd_dict[u"uid"]        = uid
-        cur_cmd_dict[u"rev_pc_cnt"] = self.wl_dict[uid]
-        cur_cmd_dict[u"key_cnt"]    = key_cnt
-        cur_cmd_dict[u"echo_cnt"]   = echo_cnt
+        # if key_cnt - self.wl_dict[uid] != 1:
+        show_str += LOST_str
+
+        cur_cmd_dict[u"p_c"]   = press_cnt
+        cur_cmd_dict[u"p_o_c"] = press_ok_cnt
+        cur_cmd_dict[u"r_c"]   = self.wl_dict[uid]
+        cur_cmd_dict[u"k_c"]   = key_cnt
+        cur_cmd_dict[u"e_c"]   = echo_cnt
+        cur_cmd_dict[u"pra_s"] = self.test_pra_dict[uid]
+
+        self.par_c_dict[uid] = key_cnt
         self.echo_cmd_list.append(cur_cmd_dict)
 
+        self.cal_ok()
+
+        return show_str
+
+    def cal_ok(self):
+        rev_sum = 1
+        key_sum = 1
+        show_str = ""
+        for item in self.wl_dict:
+            cal_r = self.wl_dict[item]    - self.test_pra_dict[item][u"r_s"]
+            cal_k = self.par_c_dict[item] - self.test_pra_dict[item][u"k_s"]
+            cal_str = u"uID:%010u R:%d K:%d \r\n" % ( self.uid_negative(item), cal_r, cal_k )
+            show_str = show_str + cal_str
+            rev_sum = rev_sum + cal_r
+            key_sum = key_sum + cal_k
+        show_str = show_str + u"按键成功率: KEY_SUM=%-10d  R_SUM=%-10d  成功率：%f%% \r\n" % ( rev_sum, key_sum, rev_sum * 100/ key_sum)
         return show_str
 
 class XesCmdEncode():
@@ -291,10 +358,10 @@ class XesCmdEncode():
                 echo_msg.append(0x00)
 
         echo_msg.append(self.cal_crc(echo_msg))
-        str_msg = ''
-        for item in echo_msg:
-            str_msg = str_msg + "%02X " % item
-        print "CMD_PACK :   " + str_msg
+        # str_msg = ''
+        # for item in echo_msg:
+        #     str_msg = str_msg + "%02X " % item
+        # print "CMD_PACK :   " + str_msg
         return echo_msg
 
     def get_question_cmd_msg(self,q_t,msg):

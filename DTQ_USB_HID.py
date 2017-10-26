@@ -66,7 +66,7 @@ class DtqUsbHidDebuger(QWidget):
         self.alive    = False
         # self.xes_decode = XesCmdDecode()
         self.xes_encode = XesCmdEncode()
-        self.setWindowTitle(u"USB HID压力测试工具v1.4")
+        self.setWindowTitle(u"USB HID压力测试工具v1.5")
         self.com_combo=QComboBox(self)
         self.com_combo.setFixedSize(100, 20)
         self.usb_hid_scan()
@@ -129,7 +129,7 @@ class DtqUsbHidDebuger(QWidget):
         q_hbox.addWidget(self.q_button)
 
         self.browser = QTextBrowser ()
-        self.browser.document().setMaximumBlockCount (500);
+        # self.browser.document().setMaximumBlockCount (500);
         box = QVBoxLayout()
 
         box.addLayout(e_hbox)
@@ -174,7 +174,7 @@ class DtqUsbHidDebuger(QWidget):
             '''
             if self.alive:
                 self.test_button.setText(u"停止压力测试")
-                self.timer.start(500)
+                self.timer.start(1000)
 
         if button_str == u"停止压力测试":
             '''
@@ -184,11 +184,15 @@ class DtqUsbHidDebuger(QWidget):
                 self.test_button.setText(u"开始压力测试")
                 self.timer.stop()
 
+
         if button_str == u"清空数据":
             '''
             清除缓存显示
             '''
             self.browser.clear()
+            self.browser.append(u"============================================================")
+            self.browser.append(self.usbhidmonitor.cmd_decode.cal_ok())
+            self.browser.append(u"============================================================")
 
         if button_str == u"发送数据":
             '''
@@ -287,6 +291,7 @@ class DtqUsbHidDebuger(QWidget):
                 self.browser.append(u"关闭设备成功！")
             self.open_button.setText(u"打开USB设备")
 
+
         if button_str == u"查看配置":
             '''
             查看设备信息
@@ -349,9 +354,9 @@ class DtqUsbHidDebuger(QWidget):
                 self.usb_hid_send_msg(answer_ack)
 
                 cur_msg_dict = self.usbhidmonitor.cmd_decode.echo_cmd_list.pop(0)
-                self.send_msg  = u"PC_R_CNT: %-6d" % cur_msg_dict[u"rev_pc_cnt"]
-                self.send_msg += u"KEY_CNT : %-6d" % cur_msg_dict[u"key_cnt"]
-                self.send_msg += u"ECHO_CNT: %-6d" % cur_msg_dict[u"echo_cnt"]
+                self.send_msg  = u"R: %-6d %-6d" % ((cur_msg_dict[u"pra_s"][u"r_s"] % 1000000),(cur_msg_dict[u"r_c"] % 1000000))
+                self.send_msg += u"K: %-6d %-6d" % ((cur_msg_dict[u"pra_s"][u"k_s"] % 1000000),(cur_msg_dict[u"k_c"] % 1000000))
+                self.send_msg += u"E: %-6d %-6d" % ((cur_msg_dict[u"pra_s"][u"e_s"] % 1000000),(cur_msg_dict[u"e_c"] % 1000000))
                 tmp_msg = self.xes_encode.get_echo_cmd_msg( cur_msg_dict[u"uid"], self.send_msg )
                 tmp_msg.append(self.xes_encode.cal_crc(tmp_msg))
                 self.usb_hid_send_msg( tmp_msg )
@@ -380,8 +385,6 @@ class DtqUsbHidDebuger(QWidget):
                 self.browser.append(u"S : ECHO: CARD_ID:[%010d] str:%s" % ( self.xes_encode.uid_negative(item), self.send_msg ))
 
     def usb_hid_send_msg(self,msg):
-        # print msg
-
         tmp_msg = []
         for item in msg:
             tmp_msg.append(item)
@@ -394,10 +397,6 @@ class DtqUsbHidDebuger(QWidget):
         for i in range(65):
             if i >= datalen:
                 tmp_msg.append(0x00)
-
-        # for item in tmp_msg:
-        #     str_msg = str_msg + "%02X " % item
-        # print "SEND_PACK:" + str_msg
         if self.report:
             self.report[0].set_raw_data(tmp_msg)
             self.report[0].send()
