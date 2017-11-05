@@ -27,6 +27,7 @@ else:
 LOGTIMEFORMAT = '%Y%m%d%H'
 log_time      = time.strftime( LOGTIMEFORMAT,time.localtime(time.time()))
 log_name      = "log-%s.txt" % log_time
+CH_TEST       = 1
 
 logging.basicConfig ( # 配置日志输出的方式及格式
     level = logging.DEBUG,
@@ -57,8 +58,10 @@ class UsbHidMontior(QThread):
 class DtqUsbHidDebuger(QWidget):
     def __init__(self, parent=None):
         super(DtqUsbHidDebuger, self).__init__(parent)
+        self.test_rf_ch = 1
+
         self.dev_dict = {}
-        # self.usb_list = []
+
         self.uid_list = []
         self.report   = None
         self.send_msg = u"恭喜你！答对了"
@@ -66,7 +69,7 @@ class DtqUsbHidDebuger(QWidget):
         self.alive    = False
         # self.xes_decode = XesCmdDecode()
         self.xes_encode = XesCmdEncode()
-        self.setWindowTitle(u"USB HID压力测试工具v1.5")
+        self.setWindowTitle(u"USB HID压力测试工具v1.5.2")
         self.com_combo=QComboBox(self)
         self.com_combo.setFixedSize(100, 20)
         self.usb_hid_scan()
@@ -117,6 +120,7 @@ class DtqUsbHidDebuger(QWidget):
         self.q_combo.addItem(u"单题多选:0x04")
         self.q_combo.addItem(u"多题单选:0x05")
         self.q_combo.addItem(u"通用题型:0x06")
+        self.q_combo.addItem(u"6键单选 :0x07")
         self.q_combo.addItem(u"停止作答:0x80")
         self.q_lineedit = QLineEdit(u'单题单选测试1')
         self.q_button=QPushButton(u"发送题目")
@@ -221,10 +225,13 @@ class DtqUsbHidDebuger(QWidget):
                 que_t = 0x05
             if q_type == u"通用题型:0x06":
                 que_t = 0x06
+            if q_type == u"6键单选 :0x07":
+                que_t = 0x07
             if q_type == u"停止作答:0x80":
                 que_t = 0x80
 
             if self.alive:
+                self.browser.clear()
                 cur_msg   = unicode(self.q_lineedit.text())
                 msg = self.xes_encode.get_question_cmd_msg( que_t, cur_msg )
                 self.usb_hid_send_msg( msg )

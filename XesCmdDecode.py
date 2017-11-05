@@ -263,12 +263,23 @@ class XesCmdDecode():
         cur_cmd_dict[u"r_c"]   = self.wl_dict[uid]
         cur_cmd_dict[u"k_c"]   = key_cnt
         cur_cmd_dict[u"e_c"]   = echo_cnt
-        cur_cmd_dict[u"pra_s"] = self.test_pra_dict[uid]
+        if self.test_pra_dict.has_key(uid):
+            cur_cmd_dict[u"pra_s"] = self.test_pra_dict[uid]
+        else:
+            pra_s_dict = {}
+            pra_s_dict[u"uid"]   = uid
+            pra_s_dict[u"r_s"]   = key_cnt
+            pra_s_dict[u"k_s"]   = key_cnt
+            pra_s_dict[u"e_s"]   = echo_cnt
+            pra_s_dict[u"p_s"]   = press_cnt
+            pra_s_dict[u"p_o_s"] = press_ok_cnt
+            self.test_pra_dict[uid] = pra_s_dict
+            cur_cmd_dict[u"pra_s"] = self.test_pra_dict[uid]
 
         self.par_c_dict[uid] = key_cnt
         self.echo_cmd_list.append(cur_cmd_dict)
 
-        self.cal_ok()
+        # self.cal_ok()
 
         return show_str
 
