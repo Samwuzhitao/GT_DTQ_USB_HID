@@ -182,7 +182,7 @@ class XesCmdDecode():
         if data[0] == 1:
             str_err = u"指令长度非法"
         show_str  = u"ECHO_ERR = %s"  % str_err
-        return show_str
+        # return show_str
 
     def bind_msg_err(self,data):
         # print data
@@ -209,36 +209,62 @@ class XesCmdDecode():
         return show_str
 
     def update_answer_info(self,data):
-        uid = ((data[10]<<24) | (data[11]<<16) | (data[12] << 8) | data[13])
+        if len(data) == 47:
+            uid = ((data[10]<<24) | (data[11]<<16) | (data[12] << 8) | data[13])
 
-        show_str = "[%02X%02X-%02X-%02X %02X:%02X:%02X,%X%02X] " % \
-           (data[1],data[2],data[3],data[4],data[5],data[6],data[7],data[8],data[9])
+            show_str = "[%02X%02X-%02X-%02X %02X:%02X:%02X,%X%02X] " % \
+               (data[1],data[2],data[3],data[4],data[5],data[6],data[7],data[8],data[9])
+            show_str  += "RSSI:%3d uID:%010d "  % (data[0],self.uid_negative(uid))
 
-        show_str  += "RSSI:%3d uID:%010d "  % (data[0],self.uid_negative(uid))
-
-        press_cnt    = ((data[17]<<24) | (data[16]<<16) | (data[15] << 8) | data[14])
-        press_ok_cnt = ((data[21]<<24) | (data[20]<<16) | (data[19] << 8) | data[18])
-        key_cnt      = ((data[25]<<24) | (data[24]<<16) | (data[23] << 8) | data[22])
-        echo_cnt     = ((data[29]<<24) | (data[28]<<16) | (data[27] << 8) | data[26])
-        show_str  += "PRESS_CNT:%d PRESS_OK_CNT:%d KEY_CNT:%d ECHO_CNT:%d "  % (press_cnt,press_ok_cnt,key_cnt,echo_cnt)
-        LOST_str = ""
-        if self.wl_dict.has_key(uid):
-            if self.wl_dict[uid] + 1 != key_cnt:
-                LOST_str = " LOST PACK! "
-
-
-        cur_cmd_dict = {}
-        cur_cmd_dict[u"uid"] = uid
-
-        if key_cnt == 1:
-            self.wl_dict[uid] = 1
-        else:
+            press_cnt    = ((data[17]<<24) | (data[16]<<16) | (data[15] << 8) | data[14])
+            press_ok_cnt = ((data[21]<<24) | (data[20]<<16) | (data[19] << 8) | data[18])
+            key_cnt      = ((data[25]<<24) | (data[24]<<16) | (data[23] << 8) | data[22])
+            echo_cnt     = ((data[29]<<24) | (data[28]<<16) | (data[27] << 8) | data[26])
+            show_str  += "PRESS_CNT:%d PRESS_OK_CNT:%d KEY_CNT:%d ECHO_CNT:%d "  % (press_cnt,press_ok_cnt,key_cnt,echo_cnt)
+            LOST_str = ""
             if self.wl_dict.has_key(uid):
-                self.wl_dict[uid] = self.wl_dict[uid] + 1
+                if self.wl_dict[uid] + 1 != key_cnt:
+                    LOST_str = " LOST PACK! "
+
+            cur_cmd_dict = {}
+            cur_cmd_dict[u"uid"] = uid
+
+            if key_cnt == 1:
+                self.wl_dict[uid] = 1
+            else:
+                if self.wl_dict.has_key(uid):
+                    self.wl_dict[uid] = self.wl_dict[uid] + 1
+                else:
+                    pra_s_dict = {}
+                    self.wl_dict[uid] = key_cnt
+                    # self.cal_press_dict[uid] = key_cnt
+                    pra_s_dict[u"uid"]   = uid
+                    pra_s_dict[u"r_s"]   = key_cnt
+                    pra_s_dict[u"k_s"]   = key_cnt
+                    pra_s_dict[u"e_s"]   = echo_cnt
+                    pra_s_dict[u"p_s"]   = press_cnt
+                    pra_s_dict[u"p_o_s"] = press_ok_cnt
+                    self.test_pra_dict[uid] = pra_s_dict
+
+            show_str = show_str + "TYPE:%02X ANSWER: " % data[30]
+
+            answer_code = data[31:]
+            for item in answer_code:
+                if item != 0:
+                    show_str = show_str + "%02x " % item
+
+            if key_cnt - self.wl_dict[uid] != 1:
+                show_str += LOST_str
+
+            cur_cmd_dict[u"p_c"]   = press_cnt
+            cur_cmd_dict[u"p_o_c"] = press_ok_cnt
+            cur_cmd_dict[u"r_c"]   = self.wl_dict[uid]
+            cur_cmd_dict[u"k_c"]   = key_cnt
+            cur_cmd_dict[u"e_c"]   = echo_cnt
+            if self.test_pra_dict.has_key(uid):
+                cur_cmd_dict[u"pra_s"] = self.test_pra_dict[uid]
             else:
                 pra_s_dict = {}
-                self.wl_dict[uid] = key_cnt
-                # self.cal_press_dict[uid] = key_cnt
                 pra_s_dict[u"uid"]   = uid
                 pra_s_dict[u"r_s"]   = key_cnt
                 pra_s_dict[u"k_s"]   = key_cnt
@@ -246,56 +272,24 @@ class XesCmdDecode():
                 pra_s_dict[u"p_s"]   = press_cnt
                 pra_s_dict[u"p_o_s"] = press_ok_cnt
                 self.test_pra_dict[uid] = pra_s_dict
+                cur_cmd_dict[u"pra_s"] = self.test_pra_dict[uid]
 
+            self.par_c_dict[uid] = key_cnt
+            self.echo_cmd_list.append(cur_cmd_dict)
 
-        show_str = show_str + "TYPE:%02X ANSWER: " % data[30]
+            return show_str
 
-        answer_code = data[31:]
-        for item in answer_code:
-            if item != 0:
-                show_str = show_str + "%02x " % item
-
-        # if key_cnt - self.wl_dict[uid] != 1:
-        show_str += LOST_str
-
-        cur_cmd_dict[u"p_c"]   = press_cnt
-        cur_cmd_dict[u"p_o_c"] = press_ok_cnt
-        cur_cmd_dict[u"r_c"]   = self.wl_dict[uid]
-        cur_cmd_dict[u"k_c"]   = key_cnt
-        cur_cmd_dict[u"e_c"]   = echo_cnt
-        if self.test_pra_dict.has_key(uid):
-            cur_cmd_dict[u"pra_s"] = self.test_pra_dict[uid]
-        else:
-            pra_s_dict = {}
-            pra_s_dict[u"uid"]   = uid
-            pra_s_dict[u"r_s"]   = key_cnt
-            pra_s_dict[u"k_s"]   = key_cnt
-            pra_s_dict[u"e_s"]   = echo_cnt
-            pra_s_dict[u"p_s"]   = press_cnt
-            pra_s_dict[u"p_o_s"] = press_ok_cnt
-            self.test_pra_dict[uid] = pra_s_dict
-            cur_cmd_dict[u"pra_s"] = self.test_pra_dict[uid]
-
-        self.par_c_dict[uid] = key_cnt
-        self.echo_cmd_list.append(cur_cmd_dict)
-
-        # self.cal_ok()
-
-        return show_str
-
-    def cal_ok(self):
-        rev_sum = 1
-        key_sum = 1
-        show_str = ""
-        for item in self.wl_dict:
-            cal_r = self.wl_dict[item]    - self.test_pra_dict[item][u"r_s"]
-            cal_k = self.par_c_dict[item] - self.test_pra_dict[item][u"k_s"]
-            cal_str = u"uID:%010u R:%d K:%d \r\n" % ( self.uid_negative(item), cal_r, cal_k )
-            show_str = show_str + cal_str
-            rev_sum = rev_sum + cal_r
-            key_sum = key_sum + cal_k
-        show_str = show_str + u"按键成功率: KEY_SUM=%-10d  R_SUM=%-10d  成功率：%f%% \r\n" % ( rev_sum, key_sum, rev_sum * 100/ key_sum)
-        return show_str
+    def sum_cal_key_rate(self):
+        rev_sum  = 0
+        key_sum  = 0
+        echo_sum = 0
+        if self.wl_dict:
+            for item in self.wl_dict:
+                cal_r = self.wl_dict[item]    - self.test_pra_dict[item][u"r_s"]
+                cal_k = self.par_c_dict[item] - self.test_pra_dict[item][u"k_s"]
+                rev_sum = rev_sum + cal_r
+                key_sum = key_sum + cal_k
+        return (key_sum,rev_sum)
 
 class XesCmdEncode():
     def __init__(self):
@@ -369,10 +363,7 @@ class XesCmdEncode():
                 echo_msg.append(0x00)
 
         echo_msg.append(self.cal_crc(echo_msg))
-        # str_msg = ''
-        # for item in echo_msg:
-        #     str_msg = str_msg + "%02X " % item
-        # print "CMD_PACK :   " + str_msg
+
         return echo_msg
 
     def get_question_cmd_msg(self,q_t,msg):
