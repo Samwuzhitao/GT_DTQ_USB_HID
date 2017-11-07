@@ -16,16 +16,15 @@ DATA_S = 6
 
 class XesCmdDecode():
     def __init__(self,uid_list):
-        self.cur_seq  = None
-        self.cur_cmd  = None
-        self.old_pac_num_dict = {}
+        self.cur_seq = None
+        self.cur_cmd = None
         self.wl_list = uid_list
         self.wl_dict = {}
+        self.cmd_arr = {}
         self.answer_update_dict = {}
         self.card_update_dict   = {}
         self.test_pra_dict      = {}
-        self.par_c_dict     = {}
-        self.cmd_arr = {}
+        self.par_c_dict    = {}
         self.echo_cmd_list = []
         self.card_cmd_list = []
         self.ReviceFunSets = {
@@ -141,33 +140,44 @@ class XesCmdDecode():
                     cmd_arr.append(item)
             return cmd_arr
 
-    def xes_cmd_decode(self,data_msg):
-        self.cur_seq = data_msg[SEQ]
-        self.cur_cmd = data_msg[CMD]
-        if self.msg_pack_is_same( data_msg ) == 1:
-            print "NEW_PACK"
-            if self.ReviceFunSets.has_key(data_msg[CMD]):
-                value_msg = data_msg[DATA_S:DATA_S+data_msg[LEN]]
-                if data_msg[NUM] == 1:
-                    # print "NUM:%d INDEX:%d " % (data_msg[NUM],data_msg[INDEX])
-                    # print value_msg
-                    str_msg = self.ReviceFunSets[data_msg[CMD]]( value_msg )
-                    return str_msg
-                else:
-                    # print "NUM:%d INDEX:%d " % (data_msg[NUM],data_msg[INDEX])
-                    cmd = self.xes_cmd_comp( data_msg )
-                    if cmd:
-                        str_msg = self.ReviceFunSets[data_msg[CMD]](cmd)
-                        self.cmd_arr = {}
-                        if str_msg:
-                            return str_msg
+    def xes_cmd_crc_check(self,data_msg):
+        crc = 0
+        cal_crc_arr = data_msg[1:DATA_S+data_msg[LEN]+1]
+        for item in cal_crc_arr:
+            crc = crc^item
+        if crc == 0:
+            return True
         else:
-            print "OLD_PACK "
+            return False
 
+    def xes_cmd_decode(self,data_msg):
+        if self.xes_cmd_crc_check(data_msg):
+            self.cur_seq = data_msg[SEQ]
+            self.cur_cmd = data_msg[CMD]
+            if self.msg_pack_is_same( data_msg ) == 1:
+                print "NEW_PACK"
+                if self.ReviceFunSets.has_key(data_msg[CMD]):
+                    value_msg = data_msg[DATA_S:DATA_S+data_msg[LEN]]
+                    if data_msg[NUM] == 1:
+                        # print "NUM:%d INDEX:%d " % (data_msg[NUM],data_msg[INDEX])
+                        # print value_msg
+                        str_msg = self.ReviceFunSets[data_msg[CMD]]( value_msg )
+                        return str_msg
+                    else:
+                        # print "NUM:%d INDEX:%d " % (data_msg[NUM],data_msg[INDEX])
+                        cmd = self.xes_cmd_comp( data_msg )
+                        if cmd:
+                            str_msg = self.ReviceFunSets[data_msg[CMD]](cmd)
+                            self.cmd_arr = {}
+                            if str_msg:
+                                return str_msg
+            else:
+                print "OLD_PACK"
+        else:
+            print "CRC_ERR_PACK"
 
     def get_device_info(self,data):
-        # print data
-        show_str  = "uID  = %d "  % (self.uid_negative(self.get_dec_uid(data[0:4])))
+        show_str  =  "uID  = %d "  % (self.uid_negative(self.get_dec_uid(data[0:4])))
         show_str  += " SW  = %d.%d.%d " % (data[4],data[5],data[6])
         show_str  += " RF_CH  = %d " % (data[7+15+8])
         show_str  += " TX_POWER  = %d" % (data[7+15+8+1])
@@ -185,7 +195,6 @@ class XesCmdDecode():
         # return show_str
 
     def bind_msg_err(self,data):
-        # print data
         if data[0] == 0:
             str_err = u"OK!"
         else:
@@ -220,11 +229,7 @@ class XesCmdDecode():
             press_ok_cnt = ((data[21]<<24) | (data[20]<<16) | (data[19] << 8) | data[18])
             key_cnt      = ((data[25]<<24) | (data[24]<<16) | (data[23] << 8) | data[22])
             echo_cnt     = ((data[29]<<24) | (data[28]<<16) | (data[27] << 8) | data[26])
-            show_str  += "PRESS_CNT:%d PRESS_OK_CNT:%d KEY_CNT:%d ECHO_CNT:%d "  % (press_cnt,press_ok_cnt,key_cnt,echo_cnt)
-            LOST_str = ""
-            if self.wl_dict.has_key(uid):
-                if self.wl_dict[uid] + 1 != key_cnt:
-                    LOST_str = " LOST PACK! "
+            show_str  += "PRESS_CNT:%-10d PRESS_OK_CNT:%-10d KEY_CNT:%-10d ECHO_CNT:%-10d "  % (press_cnt,press_ok_cnt,key_cnt,echo_cnt)
 
             cur_cmd_dict = {}
             cur_cmd_dict[u"uid"] = uid
@@ -252,9 +257,6 @@ class XesCmdDecode():
             for item in answer_code:
                 if item != 0:
                     show_str = show_str + "%02x " % item
-
-            if key_cnt - self.wl_dict[uid] != 1:
-                show_str += LOST_str
 
             cur_cmd_dict[u"p_c"]   = press_cnt
             cur_cmd_dict[u"p_o_c"] = press_ok_cnt
@@ -367,7 +369,8 @@ class XesCmdEncode():
         return echo_msg
 
     def get_question_cmd_msg(self,q_t,msg):
-        que_msg = [0x01, 0x01, 0x01, 0x01, 0x0A, 0x20, 0x17, 0x08, 0x28, 0x17, 0x53, 0x35, 0x06, 0x00]
+        que_msg = [0x01, 0x01, 0x01, 0x01, 0x0A, 0x20, 0x17,
+                   0x08, 0x28, 0x17, 0x53, 0x35, 0x06, 0x00]
         self.seq_add()
         que_msg[0] = self.s_seq
         que_msg.append(q_t)
@@ -385,8 +388,9 @@ class XesCmdEncode():
         return que_msg
 
 if __name__=='__main__':
+    wl_dict = {}
     uid_arr = [0x01,0x02,0x03,0x04]
-    xes_decode = XesCmdDecode()
+    xes_decode = XesCmdDecode( wl_dict )
     xes_encode = XesCmdEncode()
     print "src       :",
     print uid_arr
@@ -396,10 +400,13 @@ if __name__=='__main__':
     print "Dec to arr:",
     print xes_encode.get_uid_hex_arr(uid_dec)
     print u"输入回下参数：%d %s" %  (uid_dec, u"测试")
-    echo_arr = xes_encode.get_echo_cmd_msg( 0x061D942D,u"恭喜你！答对了")
+    echo_arr = xes_encode.get_echo_cmd_msg( 0x061D942D, u"恭喜你！答对了" )
     print u"输出指令数组：",
     echo_arr_str = ""
     for item in echo_arr:
         echo_arr_str += "%02X " % item
     print echo_arr_str
+    crc_check = xes_decode.xes_cmd_crc_check(echo_arr)
+    print "CRC CHECK: %d" % crc_check
+
 

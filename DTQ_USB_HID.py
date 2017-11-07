@@ -51,7 +51,7 @@ class UsbHidMontior(QThread):
         while self.working == True:
             if self.new_msg:
                 str_msg = self.cmd_decode.xes_cmd_decode(self.new_msg)
-                if str_msg:
+                if str_msg != None:
                     self.emit(SIGNAL('usb_r_msg(QString)'),str_msg)
                 self.new_msg = None
 
@@ -68,13 +68,13 @@ class DtqUsbHidDebuger(QWidget):
         self.card_cnt_dict = {}
         self.alive    = False
         self.xes_encode = XesCmdEncode()
-        self.setWindowTitle(u"USB HID压力测试工具v1.6.1")
+        self.setWindowTitle(u"USB HID压力测试工具v1.6.2")
         self.com_combo=QComboBox(self)
         self.com_combo.setFixedSize(100, 20)
         self.usb_hid_scan()
         self.open_button= QPushButton(u"打开USB设备")
         self.clear_button=QPushButton(u"清空数据")
-        self.test_button=QPushButton(u"开始压力测试")
+        self.test_button=QPushButton(u"开始回显压测")
         self.bind_button=QPushButton(u"开始绑定")
         self.check_conf_button=QPushButton(u"查看配置")
         self.clear_conf_button=QPushButton(u"清除配置")
@@ -110,7 +110,7 @@ class DtqUsbHidDebuger(QWidget):
         self.r_sum_label.setFont(QFont("Roman times",15,QFont.Bold))
         self.r_sum_lineedit = QLineEdit(u'0')
         self.r_sum_lineedit.setFont(QFont("Roman times",15,QFont.Bold))
-        self.k_rate_label=QLabel(u"按键成功率:")
+        self.k_rate_label=QLabel(u"成功率:")
         self.k_rate_label.setFont(QFont("Roman times",15,QFont.Bold))
         self.k_rate_lineedit = QLineEdit(u'0%')
         self.k_rate_lineedit.setFont(QFont("Roman times",15,QFont.Bold))
@@ -215,20 +215,20 @@ class DtqUsbHidDebuger(QWidget):
         if button is None or not isinstance(button, QPushButton):
             return
         button_str = button.text()
-        if button_str == u"开始压力测试":
+        if button_str == u"开始回显压测":
             '''
-            开始压力测试
+            开始回显压测
             '''
             if self.alive:
-                self.test_button.setText(u"停止压力测试")
+                self.test_button.setText(u"停止回显压测")
                 self.timer.start(1000)
 
-        if button_str == u"停止压力测试":
+        if button_str == u"停止回显压测":
             '''
-            停止压力测试
+            停止回显压测
             '''
             if self.alive:
-                self.test_button.setText(u"开始压力测试")
+                self.test_button.setText(u"开始回显压测")
                 self.timer.stop()
 
 
@@ -379,25 +379,25 @@ class DtqUsbHidDebuger(QWidget):
                 card_id_ack.append(self.xes_encode.cal_crc(card_id_ack))
                 self.usb_hid_send_msg(card_id_ack)
 
-                cur_msg_dict = self.usbhidmonitor.cmd_decode.card_cmd_list.pop(0)
-                if self.send_cnt.has_key(cur_msg_dict[u"uid"]):
-                    self.send_cnt[cur_msg_dict[u"uid"]] = 1
-                self.send_msg = u"uID: %010u" % self.xes_encode.uid_negative(cur_msg_dict[u"uid"])
-                tmp_msg = self.xes_encode.get_echo_cmd_msg( cur_msg_dict[u"uid"], self.send_msg )
+                mg_dict = self.usbhidmonitor.cmd_decode.card_cmd_list.pop(0)
+                if self.send_cnt.has_key(mg_dict[u"uid"]):
+                    self.send_cnt[mg_dict[u"uid"]] = 1
+                self.send_msg = u"uID: %010u" % self.xes_encode.uid_negative(mg_dict[u"uid"])
+                tmp_msg = self.xes_encode.get_echo_cmd_msg( mg_dict[u"uid"], self.send_msg )
                 tmp_msg.append(self.xes_encode.cal_crc(tmp_msg))
                 self.usb_hid_send_msg( tmp_msg )
 
-                if cur_msg_dict[u"uid"] > 0:
-                    if self.qtree_dict.has_key(cur_msg_dict[u"uid"]):
-                        self.card_cnt_dict[cur_msg_dict[u"uid"]] = self.card_cnt_dict[cur_msg_dict[u"uid"]] + 1
-                        self.qtree_dict[cur_msg_dict[u"uid"]].setText(7, str(self.card_cnt_dict[cur_msg_dict[u"uid"]]))
+                if mg_dict[u"uid"] > 0:
+                    if self.qtree_dict.has_key(mg_dict[u"uid"]):
+                        self.card_cnt_dict[mg_dict[u"uid"]] = self.card_cnt_dict[mg_dict[u"uid"]] + 1
+                        self.qtree_dict[mg_dict[u"uid"]].setText(7, str(self.card_cnt_dict[mg_dict[u"uid"]]))
                     else:
-                        self.card_cnt_dict[cur_msg_dict[u"uid"]] = 1
-                        self.qtree_dict[cur_msg_dict[u"uid"]] = QTreeWidgetItem(self.tree_com)
-                        self.qtree_dict[cur_msg_dict[u"uid"]].setText(0, str(len(self.qtree_dict)))
-                        uid_str = "%010d" % self.xes_encode.uid_negative(cur_msg_dict[u"uid"])
-                        self.qtree_dict[cur_msg_dict[u"uid"]].setText(1, str(uid_str))
-                        self.qtree_dict[cur_msg_dict[u"uid"]].setText(7, str(cur_msg_dict[u"k_c"]))
+                        self.card_cnt_dict[mg_dict[u"uid"]] = 1
+                        self.qtree_dict[mg_dict[u"uid"]] = QTreeWidgetItem(self.tree_com)
+                        self.qtree_dict[mg_dict[u"uid"]].setText(0, str(len(self.qtree_dict)))
+                        uid_str = "%010d" % self.xes_encode.uid_negative(mg_dict[u"uid"])
+                        self.qtree_dict[mg_dict[u"uid"]].setText(1, str(uid_str))
+                        self.qtree_dict[mg_dict[u"uid"]].setText(7, str(mg_dict[u"k_c"]))
 
             if len(self.usbhidmonitor.cmd_decode.echo_cmd_list) > 0:
                 answer_ack  = [0x01, 0x01, 0x01, 0x82, 0x00]
@@ -405,32 +405,32 @@ class DtqUsbHidDebuger(QWidget):
                 answer_ack.append(self.xes_encode.cal_crc(answer_ack))
                 self.usb_hid_send_msg(answer_ack)
 
-                cur_msg_dict = self.usbhidmonitor.cmd_decode.echo_cmd_list.pop(0)
-                self.send_msg  = u"R: %-6d %-6d" % ((cur_msg_dict[u"pra_s"][u"r_s"] % 1000000),(cur_msg_dict[u"r_c"] % 1000000))
-                self.send_msg += u"K: %-6d %-6d" % ((cur_msg_dict[u"pra_s"][u"k_s"] % 1000000),(cur_msg_dict[u"k_c"] % 1000000))
-                self.send_msg += u"E: %-6d %-6d" % ((cur_msg_dict[u"pra_s"][u"e_s"] % 1000000),(cur_msg_dict[u"e_c"] % 1000000))
-                tmp_msg = self.xes_encode.get_echo_cmd_msg( cur_msg_dict[u"uid"], self.send_msg )
+                mg_dict = self.usbhidmonitor.cmd_decode.echo_cmd_list.pop(0)
+                self.send_msg  = u"R: %-6d %-6d" % ((mg_dict[u"pra_s"][u"r_s"] % 1000000),(mg_dict[u"r_c"] % 1000000))
+                self.send_msg += u"K: %-6d %-6d" % ((mg_dict[u"pra_s"][u"k_s"] % 1000000),(mg_dict[u"k_c"] % 1000000))
+                self.send_msg += u"E: %-6d %-6d" % ((mg_dict[u"pra_s"][u"e_s"] % 1000000),(mg_dict[u"e_c"] % 1000000))
+                tmp_msg = self.xes_encode.get_echo_cmd_msg( mg_dict[u"uid"], self.send_msg )
                 tmp_msg.append(self.xes_encode.cal_crc(tmp_msg))
                 self.usb_hid_send_msg( tmp_msg )
 
-                if cur_msg_dict[u"uid"] > 0:
-                    if self.qtree_dict.has_key(cur_msg_dict[u"uid"]):
-                        self.qtree_dict[cur_msg_dict[u"uid"]].setText(2, str(cur_msg_dict[u"k_c"] - cur_msg_dict[u"pra_s"][u"k_s"]))
-                        self.qtree_dict[cur_msg_dict[u"uid"]].setText(3, str(cur_msg_dict[u"r_c"] - cur_msg_dict[u"pra_s"][u"r_s"]))
-                        self.qtree_dict[cur_msg_dict[u"uid"]].setText(4, str(cur_msg_dict[u"e_c"] - cur_msg_dict[u"pra_s"][u"e_s"]))
-                        self.qtree_dict[cur_msg_dict[u"uid"]].setText(5, str(cur_msg_dict[u"pra_s"][u"k_s"]))
-                        self.qtree_dict[cur_msg_dict[u"uid"]].setText(6, str(cur_msg_dict[u"k_c"]))
+                if mg_dict[u"uid"] > 0:
+                    if self.qtree_dict.has_key(mg_dict[u"uid"]):
+                        self.qtree_dict[mg_dict[u"uid"]].setText(2, str(mg_dict[u"k_c"] - mg_dict[u"pra_s"][u"k_s"]))
+                        self.qtree_dict[mg_dict[u"uid"]].setText(3, str(mg_dict[u"r_c"] - mg_dict[u"pra_s"][u"r_s"]))
+                        self.qtree_dict[mg_dict[u"uid"]].setText(4, str(mg_dict[u"e_c"] - mg_dict[u"pra_s"][u"e_s"]))
+                        self.qtree_dict[mg_dict[u"uid"]].setText(5, str(mg_dict[u"pra_s"][u"k_s"]))
+                        self.qtree_dict[mg_dict[u"uid"]].setText(6, str(mg_dict[u"k_c"]))
                     else:
-                        if cur_msg_dict[u"k_c"] > 0:
-                            self.card_cnt_dict[cur_msg_dict[u"uid"]] = 0
-                            self.qtree_dict[cur_msg_dict[u"uid"]] = QTreeWidgetItem(self.tree_com)
-                            self.qtree_dict[cur_msg_dict[u"uid"]].setText(0, str(len(self.qtree_dict)))
-                            uid_str = "%010d" % self.xes_encode.uid_negative(cur_msg_dict[u"uid"])
-                            self.qtree_dict[cur_msg_dict[u"uid"]].setText(1, str(uid_str))
-                            self.qtree_dict[cur_msg_dict[u"uid"]].setText(2, str(cur_msg_dict[u"k_c"] - cur_msg_dict[u"pra_s"][u"k_s"]))
-                            self.qtree_dict[cur_msg_dict[u"uid"]].setText(3, str(cur_msg_dict[u"r_c"] - cur_msg_dict[u"pra_s"][u"r_s"]))
-                            self.qtree_dict[cur_msg_dict[u"uid"]].setText(4, str(cur_msg_dict[u"e_c"] - cur_msg_dict[u"pra_s"][u"e_s"]))
-                            self.qtree_dict[cur_msg_dict[u"uid"]].setText(7, str(self.card_cnt_dict[cur_msg_dict[u"uid"]]))
+                        if mg_dict[u"k_c"] > 0:
+                            self.card_cnt_dict[mg_dict[u"uid"]] = 0
+                            self.qtree_dict[mg_dict[u"uid"]] = QTreeWidgetItem(self.tree_com)
+                            self.qtree_dict[mg_dict[u"uid"]].setText(0, str(len(self.qtree_dict)))
+                            uid_str = "%010d" % self.xes_encode.uid_negative(mg_dict[u"uid"])
+                            self.qtree_dict[mg_dict[u"uid"]].setText(1, str(uid_str))
+                            self.qtree_dict[mg_dict[u"uid"]].setText(2, str(mg_dict[u"k_c"] - mg_dict[u"pra_s"][u"k_s"]))
+                            self.qtree_dict[mg_dict[u"uid"]].setText(3, str(mg_dict[u"r_c"] - mg_dict[u"pra_s"][u"r_s"]))
+                            self.qtree_dict[mg_dict[u"uid"]].setText(4, str(mg_dict[u"e_c"] - mg_dict[u"pra_s"][u"e_s"]))
+                            self.qtree_dict[mg_dict[u"uid"]].setText(7, str(self.card_cnt_dict[mg_dict[u"uid"]]))
 
     def usb_show_hook(self,data):
         self.usbhidmonitor.new_msg = data
