@@ -152,17 +152,18 @@ class DtqUsbHidDebuger(QWidget):
 
         self.tree_com = QTreeWidget()
         self.tree_com.setFont(QFont(u"答题器数据统计", 8, False))
-        self.tree_com.setColumnCount(8)
+        self.tree_com.setColumnCount(9)
         self.tree_com.setHeaderLabels([u'序号',u'uID',u'按键次数',
-            u'接收次数',u'回显次数',u'计数初值',u'当前计数值',u'刷卡次数'])
+            u'接收次数',u'回显次数',u'计数初值',u'当前计数值',u'刷卡次数',u'重启次数'])
         self.tree_com.setColumnWidth(0, 50)
-        self.tree_com.setColumnWidth(1, 100)
+        self.tree_com.setColumnWidth(1, 80)
         self.tree_com.setColumnWidth(2, 70)
         self.tree_com.setColumnWidth(3, 70)
         self.tree_com.setColumnWidth(4, 70)
-        self.tree_com.setColumnWidth(5, 80)
-        self.tree_com.setColumnWidth(6, 80)
-        self.tree_com.setColumnWidth(7, 80)
+        self.tree_com.setColumnWidth(5, 70)
+        self.tree_com.setColumnWidth(6, 70)
+        self.tree_com.setColumnWidth(7, 70)
+        self.tree_com.setColumnWidth(8, 70)
 
         box = QVBoxLayout()
         box.addLayout(e_hbox)
@@ -420,6 +421,7 @@ class DtqUsbHidDebuger(QWidget):
                         self.qtree_dict[mg_dict[u"uid"]].setText(4, str(mg_dict[u"e_c"] - mg_dict[u"pra_s"][u"e_s"]))
                         self.qtree_dict[mg_dict[u"uid"]].setText(5, str(mg_dict[u"pra_s"][u"k_s"]))
                         self.qtree_dict[mg_dict[u"uid"]].setText(6, str(mg_dict[u"k_c"]))
+                        self.qtree_dict[mg_dict[u"uid"]].setText(8, str(mg_dict[u"rst_c"]))
                     else:
                         if mg_dict[u"k_c"] > 0:
                             self.card_cnt_dict[mg_dict[u"uid"]] = 0
@@ -431,6 +433,7 @@ class DtqUsbHidDebuger(QWidget):
                             self.qtree_dict[mg_dict[u"uid"]].setText(3, str(mg_dict[u"r_c"] - mg_dict[u"pra_s"][u"r_s"]))
                             self.qtree_dict[mg_dict[u"uid"]].setText(4, str(mg_dict[u"e_c"] - mg_dict[u"pra_s"][u"e_s"]))
                             self.qtree_dict[mg_dict[u"uid"]].setText(7, str(self.card_cnt_dict[mg_dict[u"uid"]]))
+                            self.qtree_dict[mg_dict[u"uid"]].setText(8, str(0))
 
     def usb_show_hook(self,data):
         self.usbhidmonitor.new_msg = data

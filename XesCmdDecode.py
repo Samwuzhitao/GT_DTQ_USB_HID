@@ -27,6 +27,7 @@ class XesCmdDecode():
         self.par_c_dict    = {}
         self.echo_cmd_list = []
         self.card_cmd_list = []
+        self.rst_cnt_dict  = {}
         self.ReviceFunSets = {
             0x93 : self.get_device_info,
             0x95 : self.bind_msg_err,
@@ -234,22 +235,32 @@ class XesCmdDecode():
             cur_cmd_dict = {}
             cur_cmd_dict[u"uid"] = uid
 
-            if key_cnt == 1:
-                self.wl_dict[uid] = 1
-            else:
-                if self.wl_dict.has_key(uid):
-                    self.wl_dict[uid] = self.wl_dict[uid] + 1
-                else:
+            if self.wl_dict.has_key(uid):
+                self.wl_dict[uid] = self.wl_dict[uid] + 1
+                if self.wl_dict[uid] > key_cnt:
+                    self.rst_cnt_dict[uid] = self.rst_cnt_dict[uid] + 1
+                    self.wl_dict[uid] = 1
                     pra_s_dict = {}
-                    self.wl_dict[uid] = key_cnt
-                    # self.cal_press_dict[uid] = key_cnt
-                    pra_s_dict[u"uid"]   = uid
                     pra_s_dict[u"r_s"]   = key_cnt
                     pra_s_dict[u"k_s"]   = key_cnt
                     pra_s_dict[u"e_s"]   = echo_cnt
                     pra_s_dict[u"p_s"]   = press_cnt
                     pra_s_dict[u"p_o_s"] = press_ok_cnt
                     self.test_pra_dict[uid] = pra_s_dict
+            else:
+                if key_cnt == 1 :
+                    self.wl_dict[uid] = 1
+                    self.rst_cnt_dict[uid] = self.rst_cnt_dict[uid] + 1
+                self.rst_cnt_dict[uid] = 0
+                pra_s_dict = {}
+                self.wl_dict[uid]    = key_cnt
+                pra_s_dict[u"uid"]   = uid
+                pra_s_dict[u"r_s"]   = key_cnt
+                pra_s_dict[u"k_s"]   = key_cnt
+                pra_s_dict[u"e_s"]   = echo_cnt
+                pra_s_dict[u"p_s"]   = press_cnt
+                pra_s_dict[u"p_o_s"] = press_ok_cnt
+                self.test_pra_dict[uid] = pra_s_dict
 
             show_str = show_str + "TYPE:%02X ANSWER: " % data[30]
 
@@ -263,6 +274,8 @@ class XesCmdDecode():
             cur_cmd_dict[u"r_c"]   = self.wl_dict[uid]
             cur_cmd_dict[u"k_c"]   = key_cnt
             cur_cmd_dict[u"e_c"]   = echo_cnt
+            cur_cmd_dict[u"rst_c"] = self.rst_cnt_dict[uid]
+
             if self.test_pra_dict.has_key(uid):
                 cur_cmd_dict[u"pra_s"] = self.test_pra_dict[uid]
             else:
@@ -277,6 +290,7 @@ class XesCmdDecode():
                 cur_cmd_dict[u"pra_s"] = self.test_pra_dict[uid]
 
             self.par_c_dict[uid] = key_cnt
+
             self.echo_cmd_list.append(cur_cmd_dict)
 
             return show_str
