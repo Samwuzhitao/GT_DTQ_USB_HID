@@ -68,7 +68,7 @@ class DtqUsbHidDebuger(QWidget):
         self.card_cnt_dict = {}
         self.alive    = False
         self.xes_encode = XesCmdEncode()
-        self.setWindowTitle(u"USB HID压力测试工具v1.6.2")
+        self.setWindowTitle(u"USB HID压力测试工具v1.6.3")
         self.com_combo=QComboBox(self)
         self.com_combo.setFixedSize(100, 20)
         self.usb_hid_scan()
@@ -398,7 +398,7 @@ class DtqUsbHidDebuger(QWidget):
                         self.qtree_dict[mg_dict[u"uid"]].setText(0, str(len(self.qtree_dict)))
                         uid_str = "%010d" % self.xes_encode.uid_negative(mg_dict[u"uid"])
                         self.qtree_dict[mg_dict[u"uid"]].setText(1, str(uid_str))
-                        self.qtree_dict[mg_dict[u"uid"]].setText(7, str(mg_dict[u"k_c"]))
+                        # self.qtree_dict[mg_dict[u"uid"]].setText(7, str(mg_dict[u"k_c"]))
 
             if len(self.usbhidmonitor.cmd_decode.echo_cmd_list) > 0:
                 answer_ack  = [0x01, 0x01, 0x01, 0x82, 0x00]

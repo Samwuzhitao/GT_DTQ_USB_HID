@@ -236,7 +236,6 @@ class XesCmdDecode():
             cur_cmd_dict[u"uid"] = uid
 
             if self.wl_dict.has_key(uid):
-                self.wl_dict[uid] = self.wl_dict[uid] + 1
                 if self.wl_dict[uid] > key_cnt:
                     self.rst_cnt_dict[uid] = self.rst_cnt_dict[uid] + 1
                     self.wl_dict[uid] = 1
@@ -247,10 +246,13 @@ class XesCmdDecode():
                     pra_s_dict[u"p_s"]   = press_cnt
                     pra_s_dict[u"p_o_s"] = press_ok_cnt
                     self.test_pra_dict[uid] = pra_s_dict
+                else:
+                    self.wl_dict[uid] = self.wl_dict[uid] + 1
             else:
                 if key_cnt == 1 :
                     self.wl_dict[uid] = 1
-                    self.rst_cnt_dict[uid] = self.rst_cnt_dict[uid] + 1
+                    if self.rst_cnt_dict.has_key(uid):
+                        self.rst_cnt_dict[uid] = self.rst_cnt_dict[uid] + 1
                 self.rst_cnt_dict[uid] = 0
                 pra_s_dict = {}
                 self.wl_dict[uid]    = key_cnt
