@@ -68,9 +68,8 @@ class DtqUsbHidDebuger(QWidget):
         self.card_cnt_dict = {}
         self.alive    = False
         self.xes_encode = XesCmdEncode()
-        self.setWindowTitle(u"USB HID压力测试工具v1.6.3")
+        self.setWindowTitle(u"USB HID压力测试工具v1.6.4")
         self.com_combo=QComboBox(self)
-        self.com_combo.setFixedSize(100, 20)
         self.usb_hid_scan()
         self.open_button= QPushButton(u"打开USB设备")
         self.clear_button=QPushButton(u"清空数据")
@@ -222,7 +221,7 @@ class DtqUsbHidDebuger(QWidget):
             '''
             if self.alive:
                 self.test_button.setText(u"停止回显压测")
-                self.timer.start(1000)
+                self.timer.start(300)
 
         if button_str == u"停止回显压测":
             '''
@@ -325,7 +324,7 @@ class DtqUsbHidDebuger(QWidget):
                 self.usbhidmonitor = UsbHidMontior(self.uid_list)
                 self.connect(self.usbhidmonitor,SIGNAL('usb_r_msg(QString)'),self.usb_cmd_decode)
                 self.usbhidmonitor.start()
-                self.browser.append(u"打开设备成功！")
+                self.browser.append(u"打开设备:[ %s ] 成功！" % usb_port )
                 self.open_button.setText(u"关闭USB设备")
 
         if button_str == u"关闭USB设备":
