@@ -360,8 +360,9 @@ class DtqUsbHidDebuger(QWidget):
         if self.usb_list  :
             for device in self.usb_list:
                 device_name = unicode("{0.product_name}").format(device)
-                self.com_combo.addItem(device_name)
-                self.dev_dict[device_name] = device
+                serial_number = unicode("{0.serial_number}").format(device)
+                self.com_combo.addItem(device_name+"_"+serial_number)
+                self.dev_dict[device_name+"_"+serial_number] = device
 
     def usb_cmd_decode(self,data):
         self.browser.setText(u"R : {0}".format(data))
