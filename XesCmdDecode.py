@@ -21,6 +21,7 @@ class XesCmdDecode():
         self.wl_list = uid_list
         self.wl_dict = {}
         self.cmd_arr = {}
+        self.conf_log = False
         self.answer_update_dict = {}
         self.card_update_dict   = {}
         self.test_pra_dict      = {}
@@ -42,6 +43,7 @@ class XesCmdDecode():
         }
 
     def check_wl_info(self,data):
+        self.conf_log = True
         pack_len = len(data)
         i = 0
         show_str = "WL: WL_LEN = %d " % (pack_len/4)
@@ -178,6 +180,7 @@ class XesCmdDecode():
             print "CRC_ERR_PACK"
 
     def get_device_info(self,data):
+        self.conf_log = True
         show_str  =  "uID  = %d "  % (self.uid_negative(self.get_dec_uid(data[0:4])))
         show_str  += " SW  = %d.%d.%d " % (data[4],data[5],data[6])
         show_str  += " RF_CH  = %d " % (data[7+15+8])
@@ -185,6 +188,7 @@ class XesCmdDecode():
         return show_str
 
     def echo_msg_err(self,data):
+        self.conf_log = False
         str_err = ""
         if data[0] == 0:
             str_err = u"OK!"
@@ -196,6 +200,7 @@ class XesCmdDecode():
         # return show_str
 
     def bind_msg_err(self,data):
+        self.conf_log = False
         if data[0] == 0:
             str_err = u"OK!"
         else:
@@ -204,6 +209,7 @@ class XesCmdDecode():
         return show_str
 
     def update_card_info(self,data):
+        self.conf_log = False
         uid    = ((data[0]<<24) | (data[1]<<16) | (data[2] << 8) | data[3])
         rep_id = ((data[4]<<24) | (data[5]<<16) | (data[6] << 8) | data[7])
         show_str  = "UID  = %08X CARD_ID = %010d REP_ID = %010d"  % \
@@ -219,6 +225,7 @@ class XesCmdDecode():
         return show_str
 
     def update_answer_info(self,data):
+        self.conf_log = False
         if len(data) == 47:
             uid = ((data[10]<<24) | (data[11]<<16) | (data[12] << 8) | data[13])
 

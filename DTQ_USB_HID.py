@@ -10,6 +10,7 @@ import os
 import sys
 import platform
 import logging
+import random
 from PyQt4.QtCore import *
 from PyQt4.QtGui  import *
 from XesCmdDecode import *
@@ -68,7 +69,7 @@ class DtqUsbHidDebuger(QWidget):
         self.card_cnt_dict = {}
         self.alive    = False
         self.xes_encode = XesCmdEncode()
-        self.setWindowTitle(u"USB HID压力测试工具v1.6.4")
+        self.setWindowTitle(u"USB HID压力测试工具v1.6.5")
         self.com_combo=QComboBox(self)
         self.usb_hid_scan()
         self.open_button= QPushButton(u"打开USB设备")
@@ -148,6 +149,8 @@ class DtqUsbHidDebuger(QWidget):
 
         self.browser = QTextBrowser ()
         self.browser.setFixedHeight(80)
+        self.conf_browser = QTextBrowser ()
+        self.conf_browser.setFixedHeight(40)
 
         self.tree_com = QTreeWidget()
         self.tree_com.setFont(QFont(u"答题器数据统计", 8, False))
@@ -169,6 +172,7 @@ class DtqUsbHidDebuger(QWidget):
         box.addLayout(c_hbox)
         box.addLayout(q_hbox)
         box.addLayout(t_hbox)
+        box.addWidget(self.conf_browser)
         box.addWidget(self.browser)
         box.addWidget(self.tree_com)
         box.addLayout(k_hbox)
@@ -365,7 +369,11 @@ class DtqUsbHidDebuger(QWidget):
                 self.dev_dict[device_name+"_"+serial_number] = device
 
     def usb_cmd_decode(self,data):
-        self.browser.setText(u"R : {0}".format(data))
+        if self.usbhidmonitor:
+            if self.usbhidmonitor.cmd_decode.conf_log == True:
+                self.conf_browser.setText(u"R : {0}".format(data))
+            else:
+                self.browser.setText(u"R : {0}".format(data))
         key_sum,rev_sum = self.usbhidmonitor.cmd_decode.sum_cal_key_rate()
         self.k_sum_lineedit.setText("%d" % key_sum)
         self.r_sum_lineedit.setText("%d" % rev_sum)
@@ -409,7 +417,11 @@ class DtqUsbHidDebuger(QWidget):
                 mg_dict = self.usbhidmonitor.cmd_decode.echo_cmd_list.pop(0)
                 self.send_msg  = u"R: %-6d %-6d" % ((mg_dict[u"pra_s"][u"r_s"] % 1000000),(mg_dict[u"r_c"] % 1000000))
                 self.send_msg += u"K: %-6d %-6d" % ((mg_dict[u"pra_s"][u"k_s"] % 1000000),(mg_dict[u"k_c"] % 1000000))
-                self.send_msg += u"E: %-6d %-6d" % ((mg_dict[u"pra_s"][u"e_s"] % 1000000),(mg_dict[u"e_c"] % 1000000))
+                rand_str = ""
+                for i in range(8):
+                    rand_str = rand_str + "%s" % self.get_rand_gp2312()
+                self.send_msg += rand_str
+                # self.send_msg += u"E: %-6d %-6d" % ((mg_dict[u"pra_s"][u"e_s"] % 1000000),(mg_dict[u"e_c"] % 1000000))
                 tmp_msg = self.xes_encode.get_echo_cmd_msg( mg_dict[u"uid"], self.send_msg )
                 tmp_msg.append(self.xes_encode.cal_crc(tmp_msg))
                 self.usb_hid_send_msg( tmp_msg )
@@ -438,6 +450,15 @@ class DtqUsbHidDebuger(QWidget):
     def usb_show_hook(self,data):
         self.usbhidmonitor.new_msg = data
 
+    def get_rand_gp2312(self):
+        head = random.randint(0xb0, 0xf7)
+        # 在head区号为55的那一块最后5个汉字是乱码,为了方便缩减下范围
+        body = random.randint(0xa1, 0xf9)
+        val = (head<<8)|body
+        str = "%x" % val
+        str_gb2312 = str.decode('hex').decode('gb2312')
+        return str_gb2312
+
     def usb_hid_echo_data(self):
         if self.uid_list:
             for item in self.uid_list:
@@ -445,7 +466,11 @@ class DtqUsbHidDebuger(QWidget):
                     self.send_cnt[item] =self.send_cnt[item] + 1
                 else:
                     self.send_cnt[item] = 1
-                self.send_msg = u"uID:%010d  S_CNT：%d" % (self.xes_encode.uid_negative(item),self.send_cnt[item])
+                self.send_msg = u"uID:%010d  S_CNT：%-8d" % (self.xes_encode.uid_negative(item),self.send_cnt[item])
+                rand_str = ""
+                for i in range(8):
+                    rand_str = rand_str + "%s" % self.get_rand_gp2312()
+                self.send_msg = self.send_msg + rand_str
                 msg = self.xes_encode.get_echo_cmd_msg( item, self.send_msg )
                 self.usb_hid_send_msg( msg )
                 # self.browser.append(u"S : ECHO: CARD_ID:[%010d] str:%s" % ( self.xes_encode.uid_negative(item), self.send_msg ))
