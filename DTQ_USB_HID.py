@@ -18,7 +18,6 @@ from XesCmdDecode import *
 # 根据系统 引用不同的库
 if platform.system() == "Windows":
     import pywinusb.hid as hid
-    # from Utils.WinUsbHelper import hidHelper
     from  serial.tools import list_ports
 else:
     import usb.core
@@ -68,13 +67,15 @@ class DtqUsbHidDebuger(QWidget):
         self.qtree_dict = {}
         self.card_cnt_dict = {}
         self.alive    = False
+        self.pp_test_flg = False
         self.xes_encode = XesCmdEncode()
-        self.setWindowTitle(u"USB HID压力测试工具v1.6.5")
+        self.setWindowTitle(u"USB HID压力测试工具v1.6.6")
         self.com_combo=QComboBox(self)
         self.usb_hid_scan()
         self.open_button= QPushButton(u"打开USB设备")
         self.clear_button=QPushButton(u"清空数据")
         self.test_button=QPushButton(u"开始回显压测")
+        self.pp_test_button=QPushButton(u"开始单选乒乓")
         self.bind_button=QPushButton(u"开始绑定")
         self.check_conf_button=QPushButton(u"查看配置")
         self.clear_conf_button=QPushButton(u"清除配置")
@@ -84,6 +85,7 @@ class DtqUsbHidDebuger(QWidget):
         e_hbox.addWidget(self.com_combo)
         e_hbox.addWidget(self.open_button)
         e_hbox.addWidget(self.test_button)
+        e_hbox.addWidget(self.pp_test_button)
         e_hbox.addWidget(self.clear_button)
 
         c_hbox = QHBoxLayout()
@@ -189,6 +191,7 @@ class DtqUsbHidDebuger(QWidget):
         self.check_conf_button.clicked.connect(self.btn_event_callback)
         self.clear_conf_button.clicked.connect(self.btn_event_callback)
         self.check_wl_button.clicked.connect(self.btn_event_callback)
+        self.pp_test_button.clicked.connect(self.btn_event_callback)
         self.q_combo.currentIndexChanged.connect(self.update_q_lineedit)
         self.timer = QTimer()
         self.timer.timeout.connect(self.usb_hid_echo_data)
@@ -359,6 +362,18 @@ class DtqUsbHidDebuger(QWidget):
                 self.usb_hid_send_msg(self.xes_encode.check_wl)
                 self.browser.append(u"S : CHECK_WL: %s " % ( self.send_msg ))
 
+        if button_str == u"开始单选乒乓":
+            if self.alive:
+                self.pp_test_flg = True
+                msg = self.xes_encode.get_question_cmd_msg( 0x01, "" )
+                self.usb_hid_send_msg( msg )
+                self.pp_test_button.setText(u"停止单选乒乓")
+
+        if button_str == u"停止单选乒乓":
+            if self.alive:
+                self.pp_test_flg = False
+                self.pp_test_button.setText(u"开始单选乒乓")
+
     def usb_hid_scan(self):
         self.usb_list  = hid.find_all_hid_devices()
         if self.usb_list  :
@@ -425,6 +440,10 @@ class DtqUsbHidDebuger(QWidget):
                 tmp_msg = self.xes_encode.get_echo_cmd_msg( mg_dict[u"uid"], self.send_msg )
                 tmp_msg.append(self.xes_encode.cal_crc(tmp_msg))
                 self.usb_hid_send_msg( tmp_msg )
+
+                if self.pp_test_flg == True:
+                    q_msg = self.xes_encode.get_question_cmd_msg( 0x01, u"发送题目乒乓测试" )
+                    self.usb_hid_send_msg( q_msg )
 
                 if mg_dict[u"uid"] > 0:
                     if self.qtree_dict.has_key(mg_dict[u"uid"]):

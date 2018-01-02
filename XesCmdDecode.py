@@ -6,6 +6,8 @@ Created on Sat Apr 22 10:59:35 2017
 @author: john
 """
 import string
+import datetime
+import time
 
 SEQ    = 1
 NUM    = 2
@@ -89,8 +91,9 @@ class XesCmdDecode():
 
     def msg_pack_is_same(self,data_msg):
         str_data = ""
+        cmd_str = "[ %s,%3d ]" % (datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), int(round(time.time() * 1000) % 1000) )#日期格式化
         cmd = data_msg[CMD]
-        cmd_str = "CMD : %02X" % cmd
+        cmd_str += "CMD : %02X" % cmd
         print cmd_str,
 
         not_same_pack = 1
@@ -98,6 +101,7 @@ class XesCmdDecode():
         if cmd == 0x02:
             uid = ((data_msg[16]<<24) | (data_msg[17]<<16) | (data_msg[18] << 8) | data_msg[19])
             if self.answer_update_dict.has_key(uid):
+
                 str_1 = "uID:%10u " % self.uid_negative(uid)
                 print str_1
                 not_same_pack = self.msg_same_check(data_msg,self.answer_update_dict[uid])
