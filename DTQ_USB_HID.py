@@ -213,24 +213,8 @@ class DtqUsbHidDebuger(QWidget):
         self.fm_update_timer.timeout.connect(self.usb_dfu_process)
 
     def update_q_lineedit(self):
-        q_type_str = ""
         q_type =  unicode(self.q_combo.currentText())
-        if q_type == u"单题单选:0x01":
-            q_type_str = u"单题单选"
-        if q_type == u"是非判断:0x02":
-            q_type_str = u"是非判断"
-        if q_type == u"抢红包  :0x03":
-            q_type_str = u"抢红包"
-        if q_type == u"单题多选:0x04":
-            q_type_str = u"单题多选"
-        if q_type == u"多题单选:0x05":
-            q_type_str = u"多题单选"
-        if q_type == u"通用题型:0x06":
-            q_type_str = u"通用题型"
-        if q_type == u"6键单选 :0x07":
-            q_type_str = u"6键单选"
-        if q_type == u"停止作答:0x80":
-            q_type_str = u"停止作答"
+        q_type_str = q_type.split(":")[0]
         self.q_lineedit.setText(q_type_str)
 
     def usb_dfu_process(self):
@@ -274,26 +258,9 @@ class DtqUsbHidDebuger(QWidget):
                     self.usb_hid_send_msg( msg )
 
         if button_str == u"发送题目":
-            que_t = 1
             q_type =  unicode(self.q_combo.currentText())
-            if q_type == u"单题单选:0x01":
-                que_t = 0x01
-            if q_type == u"是非判断:0x02":
-                que_t = 0x02
-            if q_type == u"抢红包  :0x03":
-                que_t = 0x03
-            if q_type == u"单题多选:0x04":
-                que_t = 0x04
-            if q_type == u"多题单选:0x05":
-                que_t = 0x05
-            if q_type == u"通用题型:0x06":
-                que_t = 0x06
-            if q_type == u"6键单选 :0x07":
-                que_t = 0x07
-            if q_type == u"停止作答:0x80":
-                que_t = 0x80
-
             if self.alive:
+                que_t = int(q_type.split(":")[1][2:])
                 self.browser.clear()
                 cur_msg   = unicode(self.q_lineedit.text())
                 msg = self.xes_encode.get_question_cmd_msg( que_t, cur_msg )
