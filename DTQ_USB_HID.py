@@ -69,8 +69,9 @@ class DtqUsbHidDebuger(QWidget):
         self.alive    = False
         self.pp_test_flg = False
         self.xes_encode = XesCmdEncode()
-        self.setWindowTitle(u"USB HID压力测试工具v1.6.6")
+        self.setWindowTitle(u"USB HID调试工具v1.7.0")
         self.com_combo=QComboBox(self)
+        self.com_combo.setFixedSize(170, 20)
         self.usb_hid_scan()
         self.open_button= QPushButton(u"打开USB设备")
         self.clear_button=QPushButton(u"清空数据")
@@ -102,6 +103,16 @@ class DtqUsbHidDebuger(QWidget):
         c_hbox.addWidget(self.check_conf_button)
         c_hbox.addWidget(self.clear_conf_button)
         c_hbox.addWidget(self.check_wl_button)
+
+        f_hbox = QHBoxLayout()
+        self.fm_label=QLabel(u"固件路径：")
+        self.fm_lineedit = QLineEdit()
+        self.fm_add_button=QPushButton(u"添加固件")
+        self.fm_update_button=QPushButton(u"升级程序")
+        f_hbox.addWidget(self.fm_label)
+        f_hbox.addWidget(self.fm_lineedit)
+        f_hbox.addWidget(self.fm_add_button)
+        f_hbox.addWidget(self.fm_update_button)
 
         k_hbox = QHBoxLayout()
         self.k_sum_label=QLabel(u"按键总和:")
@@ -174,6 +185,7 @@ class DtqUsbHidDebuger(QWidget):
         box.addLayout(c_hbox)
         box.addLayout(q_hbox)
         box.addLayout(t_hbox)
+        box.addLayout(f_hbox)
         box.addWidget(self.conf_browser)
         box.addWidget(self.browser)
         box.addWidget(self.tree_com)
@@ -192,9 +204,13 @@ class DtqUsbHidDebuger(QWidget):
         self.clear_conf_button.clicked.connect(self.btn_event_callback)
         self.check_wl_button.clicked.connect(self.btn_event_callback)
         self.pp_test_button.clicked.connect(self.btn_event_callback)
+        self.fm_add_button.clicked.connect(self.btn_event_callback)
+        self.fm_update_button.clicked.connect(self.btn_event_callback)
         self.q_combo.currentIndexChanged.connect(self.update_q_lineedit)
         self.timer = QTimer()
         self.timer.timeout.connect(self.usb_hid_echo_data)
+        self.fm_update_timer = QTimer()
+        self.fm_update_timer.timeout.connect(self.usb_dfu_process)
 
     def update_q_lineedit(self):
         q_type_str = ""
@@ -217,38 +233,32 @@ class DtqUsbHidDebuger(QWidget):
             q_type_str = u"停止作答"
         self.q_lineedit.setText(q_type_str)
 
+    def usb_dfu_process(self):
+        if self.alive:
+            image_info_pac = self.xes_encode.usb_dfu_soh_pac()
+            if image_info_pac :
+                self.usb_hid_send_msg(self.xes_encode.usb_dfu_soh_pac())
+                self.browser.append(u"S : 开始下载...")
+
     def btn_event_callback(self):
         button = self.sender()
         if button is None or not isinstance(button, QPushButton):
             return
         button_str = button.text()
         if button_str == u"开始回显压测":
-            '''
-            开始回显压测
-            '''
             if self.alive:
                 self.test_button.setText(u"停止回显压测")
                 self.timer.start(300)
 
         if button_str == u"停止回显压测":
-            '''
-            停止回显压测
-            '''
             if self.alive:
                 self.test_button.setText(u"开始回显压测")
                 self.timer.stop()
 
-
         if button_str == u"清空数据":
-            '''
-            清除缓存显示
-            '''
             self.browser.clear()
 
         if button_str == u"发送数据":
-            '''
-            改变发送数据的内容
-            '''
             if self.uid_list:
                 for item in self.uid_list:
                     if self.send_cnt.has_key(item):
@@ -264,9 +274,6 @@ class DtqUsbHidDebuger(QWidget):
                     self.usb_hid_send_msg( msg )
 
         if button_str == u"发送题目":
-            '''
-            改变发送数据的内容
-            '''
             que_t = 1
             q_type =  unicode(self.q_combo.currentText())
             if q_type == u"单题单选:0x01":
@@ -294,9 +301,6 @@ class DtqUsbHidDebuger(QWidget):
                 self.browser.append(u"S : 发送题目 : %s : %s " % ( q_type, cur_msg ))
 
         if button_str == u"开始绑定":
-            '''
-            发送开始绑定指令
-            '''
             if self.alive:
                 self.send_msg = u"绑定开始！请将需要测试的答题器刷卡绑定！"
                 self.usb_hid_send_msg(self.xes_encode.bind_start_msg)
@@ -304,9 +308,6 @@ class DtqUsbHidDebuger(QWidget):
                 self.browser.append(u"S : BIND_START: %s " % ( self.send_msg ))
 
         if button_str == u"停止绑定":
-            '''
-            发送开始绑定指令
-            '''
             if self.alive:
                 self.send_msg = u"绑定结束！此时刷卡无效"
                 self.usb_hid_send_msg(self.xes_encode.bind_stop_msg)
@@ -373,6 +374,18 @@ class DtqUsbHidDebuger(QWidget):
             if self.alive:
                 self.pp_test_flg = False
                 self.pp_test_button.setText(u"开始单选乒乓")
+
+        if button_str == u"添加固件":
+            temp_image_path = unicode(QFileDialog.getOpenFileName(self, 'Open file', './', "bin files(*.bin)"))
+            if len(temp_image_path) > 0:
+                self.fm_lineedit.setText(temp_image_path)
+
+        if button_str == u"升级程序":
+            image_path = unicode(self.fm_lineedit.text())
+            if len(image_path) > 0:
+                print image_path
+                self.xes_encode.usb_dfu_init( image_path )
+                self.fm_update_timer.start(100)
 
     def usb_hid_scan(self):
         self.usb_list  = hid.find_all_hid_devices()

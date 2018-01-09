@@ -8,6 +8,7 @@ Created on Sat Apr 22 10:59:35 2017
 import string
 import datetime
 import time
+import os
 
 SEQ    = 1
 NUM    = 2
@@ -18,12 +19,12 @@ DATA_S = 6
 
 class XesCmdDecode():
     def __init__(self,uid_list):
-        self.cur_seq = None
-        self.cur_cmd = None
-        self.wl_list = uid_list
-        self.wl_dict = {}
-        self.cmd_arr = {}
-        self.conf_log = False
+        self.cur_seq   = None
+        self.cur_cmd   = None
+        self.wl_list   = uid_list
+        self.wl_dict   = {}
+        self.cmd_arr   = {}
+        self.conf_log  = False
         self.answer_update_dict = {}
         self.card_update_dict   = {}
         self.test_pra_dict      = {}
@@ -41,7 +42,8 @@ class XesCmdDecode():
             0x94 : self.bind_msg_err,
             0x16 : self.update_card_info,
             0x02 : self.update_answer_info,
-            0x98 : self.check_wl_info
+            0x98 : self.check_wl_info,
+            0xA0 : self.fm_image_info_err
         }
 
     def check_wl_info(self,data):
@@ -91,7 +93,8 @@ class XesCmdDecode():
 
     def msg_pack_is_same(self,data_msg):
         str_data = ""
-        cmd_str = "[ %s,%3d ]" % (datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), int(round(time.time() * 1000) % 1000) )#日期格式化
+        cmd_str = "[ %s,%3d ]" % (datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                  int(round(time.time() * 1000) % 1000) )#日期格式化
         cmd = data_msg[CMD]
         cmd_str += "CMD : %02X" % cmd
         print cmd_str,
@@ -212,6 +215,15 @@ class XesCmdDecode():
         show_str  = "Err  = %s"  % str_err
         return show_str
 
+    def fm_image_info_err(self,data):
+        self.conf_log = False
+        if data[0] == 0:
+            str_err = u"OK!"
+        else:
+            str_err = u"FIAL!"
+        show_str  = "Err  = %s"  % str_err
+        return show_str
+
     def update_card_info(self,data):
         self.conf_log = False
         uid    = ((data[0]<<24) | (data[1]<<16) | (data[2] << 8) | data[3])
@@ -322,6 +334,9 @@ class XesCmdDecode():
 
 class XesCmdEncode():
     def __init__(self):
+        self.file_path = None
+        self.file_name = None
+        self.file_size = None
         self.s_seq = 1
         self.get_device_info_msg = [0x01, 0x01, 0x01, 0x13, 0x00, 0x12]
         self.bind_start_msg      = [0x01, 0x01, 0x01, 0x15, 0x00, 0x14]
@@ -333,6 +348,31 @@ class XesCmdEncode():
             u"绑定开始指令" : self.bind_start_msg,
             u"绑定结束指令" : self.bind_stop_msg,
         }
+
+    def usb_dfu_init(self,file_path):
+            if file_path :
+                self.file_path = file_path
+                self.file_name = os.path.basename(file_path) #unicode(image_path.toUtf8(),'utf-8','ignore')
+                self.file_size = int(os.path.getsize(file_path))
+                print "File Name: %s " % self.file_name
+                print "File Size: %d " % self.file_size
+
+    def usb_dfu_soh_pac(self):
+        NOP = 0
+        if self.file_path :
+            image_info_msg = [0x01, 0x01, 0x01, 0x20, 0x00]
+            self.seq_add()
+            image_info_msg[0] = self.s_seq
+            for item in self.file_name:
+                image_info_msg.append(ord(item))
+            image_info_msg.append(NOP)
+            image_info_msg.append( self.file_size & 0xFF )
+            image_info_msg.append((self.file_size >> 8) & 0xFF)
+            image_info_msg.append((self.file_size >> 16) & 0xFF)
+            image_info_msg.append((self.file_size >> 24) & 0xFF)
+            image_info_msg[4] = (len(self.file_name) + 5) & 0xFF
+            image_info_msg.append(self.cal_crc(image_info_msg))
+            return image_info_msg
 
     def uid_negative(self,uid):
         return (((uid & 0xFF000000)>>24) | ((uid & 0x00FF0000)>>8)  |
