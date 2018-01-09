@@ -219,10 +219,24 @@ class DtqUsbHidDebuger(QWidget):
 
     def usb_dfu_process(self):
         if self.alive:
-            image_info_pac = self.xes_encode.usb_dfu_soh_pac()
-            if image_info_pac :
-                self.usb_hid_send_msg(self.xes_encode.usb_dfu_soh_pac())
-                self.browser.append(u"S : 开始下载...")
+            # 发送镜像信息
+            if self.usbhidmonitor.cmd_decode.usb_dfu_state == 0:
+                self.browser.append(u"S : 开始连接设备...")
+                image_info_pac = self.xes_encode.usb_dfu_soh_pac()
+                if image_info_pac :
+                    self.fm_update_timer.stop()
+                    self.fm_update_timer.start(50)
+                    self.usb_hid_send_msg(image_info_pac)
+            # 发送镜像数据
+            if self.usbhidmonitor.cmd_decode.usb_dfu_state == 1:
+                print self.browser.append(u"S : 建立连接成功...")
+                image_data_pac = self.xes_encode.usb_dfu_stx_pac()
+                if image_data_pac != None:
+                    # print image_data_pac
+                    self.usb_hid_send_msg(image_data_pac)
+                else:
+                    self.fm_update_timer.stop()
+                    print self.browser.append(u"S : 数据传输完成...")
 
     def btn_event_callback(self):
         button = self.sender()
@@ -352,7 +366,7 @@ class DtqUsbHidDebuger(QWidget):
             if len(image_path) > 0:
                 print image_path
                 self.xes_encode.usb_dfu_init( image_path )
-                self.fm_update_timer.start(100)
+                self.fm_update_timer.start(300)
 
     def usb_hid_scan(self):
         self.usb_list  = hid.find_all_hid_devices()

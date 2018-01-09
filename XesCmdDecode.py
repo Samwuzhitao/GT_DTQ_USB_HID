@@ -32,6 +32,7 @@ class XesCmdDecode():
         self.echo_cmd_list = []
         self.card_cmd_list = []
         self.rst_cnt_dict  = {}
+        self.usb_dfu_state = 0
         self.ReviceFunSets = {
             0x93 : self.get_device_info,
             0x95 : self.bind_msg_err,
@@ -43,7 +44,8 @@ class XesCmdDecode():
             0x16 : self.update_card_info,
             0x02 : self.update_answer_info,
             0x98 : self.check_wl_info,
-            0xA0 : self.fm_image_info_err
+            0xA0 : self.fm_image_info_err,
+            0xA1 : self.fm_image_info_err
         }
 
     def check_wl_info(self,data):
@@ -219,8 +221,10 @@ class XesCmdDecode():
         self.conf_log = False
         if data[0] == 0:
             str_err = u"OK!"
+            self.usb_dfu_state = 1
         else:
             str_err = u"FIAL!"
+            # self.usb_dfu_state = 0
         show_str  = "Err  = %s"  % str_err
         return show_str
 
@@ -334,9 +338,11 @@ class XesCmdDecode():
 
 class XesCmdEncode():
     def __init__(self):
-        self.file_path = None
-        self.file_name = None
-        self.file_size = None
+        self.file_path   = None
+        self.file_name   = None
+        self.file_size   = 0
+        self.file_offset = 0
+        self.dfu_sector  = 52
         self.s_seq = 1
         self.get_device_info_msg = [0x01, 0x01, 0x01, 0x13, 0x00, 0x12]
         self.bind_start_msg      = [0x01, 0x01, 0x01, 0x15, 0x00, 0x14]
@@ -359,6 +365,7 @@ class XesCmdEncode():
 
     def usb_dfu_soh_pac(self):
         NOP = 0
+        self.file_offset = 0
         if self.file_path :
             image_info_msg = [0x01, 0x01, 0x01, 0x20, 0x00]
             self.seq_add()
@@ -373,6 +380,49 @@ class XesCmdEncode():
             image_info_msg[4] = (len(self.file_name) + 5) & 0xFF
             image_info_msg.append(self.cal_crc(image_info_msg))
             return image_info_msg
+
+    def usb_dfu_stx_pac(self):
+        # 封装帧内容
+        NOP  = 0
+        image_data = None
+        data_pac_len = 0
+        if self.file_path :
+            image_data_msg = [0x01, 0x01, 0x01, 0x21, 0x00]
+            self.seq_add()
+            image_data_msg[0] = self.s_seq
+            # 读取数据
+            f = open(self.file_path, "rb")
+            if self.file_size > self.file_offset :
+                f.seek(self.file_offset,0)
+                if (self.file_offset + self.dfu_sector) < self.file_size:
+                    data_pac_len = self.dfu_sector
+                else:
+                    data_pac_len = self.file_size-self.file_offset
+                image_data = f.read( data_pac_len )
+                self.file_offset = self.file_offset + data_pac_len
+            f.close()
+
+            print " file_offset = %d , sum = %d " % ( self.file_offset,self.file_size),;
+
+            # 封装数据
+            # 填充数据偏移
+            if image_data:
+                image_data_msg.append( self.file_offset & 0xFF )
+                image_data_msg.append((self.file_offset >> 8) & 0xFF)
+                image_data_msg.append((self.file_offset >> 16) & 0xFF)
+                image_data_msg.append((self.file_offset >> 24) & 0xFF)
+                image_data_msg[4] = ((data_pac_len) + 4) & 0xFF
+                # 填充数据内容
+                for item in image_data:
+                     image_data_msg.append(ord(item))
+                # 跟新数据长度
+                image_data_msg[4] = data_pac_len + 4
+
+                image_data_msg.append(self.cal_crc(image_data_msg))
+
+                return image_data_msg
+            else:
+                return None
 
     def uid_negative(self,uid):
         return (((uid & 0xFF000000)>>24) | ((uid & 0x00FF0000)>>8)  |
