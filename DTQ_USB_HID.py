@@ -236,18 +236,33 @@ class DtqUsbHidDebuger(QWidget):
             self.usb_hid_scan()
             for item in self.dev_dict:
                 base_name = item.split(".")[0]
-                print self.usbhidmonitor.cmd_decode.usb_dfu_state
-                print base_name[:-1]
-                if base_name[:-1]== "JSQ_BOOT":
-                    self.dev_dict[item].open()
-                    self.dev_dict[item].set_raw_data_handler(self.usb_show_hook)
-                    self.report = self.dev_dict[item].find_output_reports()
-                    self.alive  = True
-                    self.usbhidmonitor = UsbHidMontior(self.uid_list)
-                    self.connect(self.usbhidmonitor,SIGNAL('usb_r_msg(QString)'),self.usb_cmd_decode)
-                    self.usbhidmonitor.start()
-                    self.browser.append(u"打开设备:[ %s ] 成功！" % item )
-                    self.open_button.setText(u"关闭USB设备")
+                print base_name[:-1],self.usbhidmonitor.cmd_decode.usb_dfu_state
+
+                if self.usbhidmonitor.cmd_decode.usb_dfu_state == 0:
+                    if base_name[:-1]== "JSQ_BOOT":
+                        self.dev_dict[item].open()
+                        self.dev_dict[item].set_raw_data_handler(self.usb_show_hook)
+                        self.report = self.dev_dict[item].find_output_reports()
+                        self.alive  = True
+                        self.usbhidmonitor = UsbHidMontior(self.uid_list)
+                        self.connect(self.usbhidmonitor,SIGNAL('usb_r_msg(QString)'),self.usb_cmd_decode)
+                        self.usbhidmonitor.start()
+                        self.browser.append(u"打开设备:[ %s ] 成功！" % item )
+                        self.open_button.setText(u"关闭USB设备")
+
+                if self.usbhidmonitor.cmd_decode.usb_dfu_state == 2:
+                    if base_name[:-1]== "DTQ_JSQ_":
+                        self.dev_dict[item].open()
+                        self.dev_dict[item].set_raw_data_handler(self.usb_show_hook)
+                        self.report = self.dev_dict[item].find_output_reports()
+                        self.alive  = True
+                        self.usbhidmonitor = UsbHidMontior(self.uid_list)
+                        self.connect(self.usbhidmonitor,SIGNAL('usb_r_msg(QString)'),self.usb_cmd_decode)
+                        self.usbhidmonitor.start()
+                        self.browser.append(u"打开设备:[ %s ] 成功！" % item )
+                        self.open_button.setText(u"关闭USB设备")
+                        self.usbhidmonitor.cmd_decode.usb_dfu_state = 0
+                        self.fm_update_timer.stop()
 
     def btn_event_callback(self):
         button = self.sender()
@@ -379,27 +394,28 @@ class DtqUsbHidDebuger(QWidget):
                 self.xes_encode.usb_dfu_init( image_path )
                 self.usbhidmonitor.cmd_decode.iamge_cmd_cnt = 0
                 self.fm_update_timer.start(300)
-                self.progressDialog_value = 0
                 self.progressDialog=QProgressDialog(self)
                 self.progressDialog.setWindowModality(Qt.WindowModal)
                 self.progressDialog.setMinimumDuration(5)
                 self.progressDialog.setWindowTitle(u"请等待")
                 self.progressDialog.setLabelText(u"下载中...")
                 self.progressDialog.setCancelButtonText(u"取消")
-                self.progressDialog.setRange(self.progressDialog_value,100)
+                self.progressDialog.setRange(0,100)
 
     def usb_hid_scan(self):
         usb_list = hid.find_all_hid_devices()
         if usb_list  :
             for device in usb_list:
                 device_name = unicode("{0.product_name}").format(device)
-                serial_number = unicode("{0.serial_number}").format(device)
-                cur_usb_name = device_name+"_"+serial_number
-                if self.dev_dict.has_key(cur_usb_name):
-                    print "SAME"
-                else:
-                    self.com_combo.addItem(device_name+"_"+serial_number)
-                    self.dev_dict[device_name+"_"+serial_number] = device
+                print device_name
+                if device_name[0:3] == "DTQ" or device_name[0:3] == "JSQ":
+                    serial_number = unicode("{0.serial_number}").format(device)
+                    cur_usb_name = device_name+"_"+serial_number
+                    if self.dev_dict.has_key(cur_usb_name):
+                        print "SAME"
+                    else:
+                        self.com_combo.addItem(device_name+"_"+serial_number)
+                        self.dev_dict[device_name+"_"+serial_number] = device
 
     def usb_cmd_decode(self,data):
         if self.usbhidmonitor:
@@ -424,8 +440,9 @@ class DtqUsbHidDebuger(QWidget):
                     self.progressDialog.setValue(self.progressDialog_value)
                 else:
                     self.browser.append(u"S : 数据传输完成...")
-                    self.alive = False
+                    self.alive    = False
                     self.dev_dict = {}
+                    self.usbhidmonitor.cmd_decode.usb_dfu_state = 2
                     self.fm_update_timer.start(300)
 
         if self.usbhidmonitor:
@@ -552,8 +569,8 @@ class DtqUsbHidDebuger(QWidget):
                 self.report[0].send()
             except hid.HIDError:
                 self.open_button.setText(u"打开USB设备")
-                self.com_combo.clear()
-                # self.dev_dict = {}
+                # self.com_combo.clear()
+                self.dev_dict = {}
                 self.alive = False
             tmp_msg = self.usbhidmonitor.cmd_decode.list_export(tmp_msg)
             logging.debug(u"发送数据：S : {0}".format(tmp_msg))
