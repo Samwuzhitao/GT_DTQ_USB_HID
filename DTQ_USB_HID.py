@@ -379,6 +379,14 @@ class DtqUsbHidDebuger(QWidget):
                 self.xes_encode.usb_dfu_init( image_path )
                 self.usbhidmonitor.cmd_decode.iamge_cmd_cnt = 0
                 self.fm_update_timer.start(300)
+                self.progressDialog_value = 0
+                self.progressDialog=QProgressDialog(self)
+                self.progressDialog.setWindowModality(Qt.WindowModal)
+                self.progressDialog.setMinimumDuration(5)
+                self.progressDialog.setWindowTitle(u"请等待")
+                self.progressDialog.setLabelText(u"下载中...")
+                self.progressDialog.setCancelButtonText(u"取消")
+                self.progressDialog.setRange(self.progressDialog_value,100)
 
     def usb_hid_scan(self):
         usb_list = hid.find_all_hid_devices()
@@ -412,12 +420,13 @@ class DtqUsbHidDebuger(QWidget):
                 image_data_pac = self.xes_encode.usb_dfu_stx_pac()
                 if image_data_pac != None:
                     self.usb_hid_send_msg( image_data_pac )
+                    self.progressDialog_value = (self.xes_encode.file_offset * 100) / self.xes_encode.file_size
+                    self.progressDialog.setValue(self.progressDialog_value)
                 else:
                     self.browser.append(u"S : 数据传输完成...")
                     self.alive = False
                     self.dev_dict = {}
                     self.fm_update_timer.start(300)
-
 
         if self.usbhidmonitor:
             if len(self.usbhidmonitor.cmd_decode.card_cmd_list) > 0:
