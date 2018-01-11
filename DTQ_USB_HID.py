@@ -219,24 +219,35 @@ class DtqUsbHidDebuger(QWidget):
 
     def usb_dfu_process(self):
         if self.alive:
+            print "CHECK"
             # 发送镜像信息
             if self.usbhidmonitor.cmd_decode.usb_dfu_state == 0:
                 self.browser.append(u"S : 开始连接设备...")
-                image_info_pac = self.xes_encode.usb_dfu_soh_pac()
-                if image_info_pac :
-                    self.fm_update_timer.stop()
-                    self.fm_update_timer.start(50)
-                    self.usb_hid_send_msg(image_info_pac)
-            # 发送镜像数据
+                if self.usbhidmonitor.cmd_decode.iamge_cmd_cnt == 0:
+                    image_info_pac = self.xes_encode.usb_dfu_soh_pac()
+                    if image_info_pac :
+                        self.usb_hid_send_msg( image_info_pac )
+            # # 发送镜像数据
             if self.usbhidmonitor.cmd_decode.usb_dfu_state == 1:
-                print self.browser.append(u"S : 建立连接成功...")
-                image_data_pac = self.xes_encode.usb_dfu_stx_pac()
-                if image_data_pac != None:
-                    # print image_data_pac
-                    self.usb_hid_send_msg(image_data_pac)
-                else:
-                    self.fm_update_timer.stop()
-                    print self.browser.append(u"S : 数据传输完成...")
+                self.browser.append(u"S : 建立连接成功...")
+                self.fm_update_timer.stop()
+        else:
+            print "SCAN"
+            self.usb_hid_scan()
+            for item in self.dev_dict:
+                base_name = item.split(".")[0]
+                print self.usbhidmonitor.cmd_decode.usb_dfu_state
+                print base_name[:-1]
+                if base_name[:-1]== "JSQ_BOOT":
+                    self.dev_dict[item].open()
+                    self.dev_dict[item].set_raw_data_handler(self.usb_show_hook)
+                    self.report = self.dev_dict[item].find_output_reports()
+                    self.alive  = True
+                    self.usbhidmonitor = UsbHidMontior(self.uid_list)
+                    self.connect(self.usbhidmonitor,SIGNAL('usb_r_msg(QString)'),self.usb_cmd_decode)
+                    self.usbhidmonitor.start()
+                    self.browser.append(u"打开设备:[ %s ] 成功！" % item )
+                    self.open_button.setText(u"关闭USB设备")
 
     def btn_event_callback(self):
         button = self.sender()
@@ -366,16 +377,21 @@ class DtqUsbHidDebuger(QWidget):
             if len(image_path) > 0:
                 print image_path
                 self.xes_encode.usb_dfu_init( image_path )
+                self.usbhidmonitor.cmd_decode.iamge_cmd_cnt = 0
                 self.fm_update_timer.start(300)
 
     def usb_hid_scan(self):
-        self.usb_list  = hid.find_all_hid_devices()
-        if self.usb_list  :
-            for device in self.usb_list:
+        usb_list = hid.find_all_hid_devices()
+        if usb_list  :
+            for device in usb_list:
                 device_name = unicode("{0.product_name}").format(device)
                 serial_number = unicode("{0.serial_number}").format(device)
-                self.com_combo.addItem(device_name+"_"+serial_number)
-                self.dev_dict[device_name+"_"+serial_number] = device
+                cur_usb_name = device_name+"_"+serial_number
+                if self.dev_dict.has_key(cur_usb_name):
+                    print "SAME"
+                else:
+                    self.com_combo.addItem(device_name+"_"+serial_number)
+                    self.dev_dict[device_name+"_"+serial_number] = device
 
     def usb_cmd_decode(self,data):
         if self.usbhidmonitor:
@@ -389,6 +405,19 @@ class DtqUsbHidDebuger(QWidget):
         if key_sum > 0:
              self.k_rate_lineedit.setText("%f" % (rev_sum*100.0/key_sum))
         logging.debug(u"接收数据：R : {0}".format(data))
+
+        if self.usbhidmonitor.cmd_decode.iamge_cmd_cnt > 0:
+            # 发送镜像数据
+            if self.usbhidmonitor.cmd_decode.usb_dfu_state == 1:
+                image_data_pac = self.xes_encode.usb_dfu_stx_pac()
+                if image_data_pac != None:
+                    self.usb_hid_send_msg( image_data_pac )
+                else:
+                    self.browser.append(u"S : 数据传输完成...")
+                    self.alive = False
+                    self.dev_dict = {}
+                    self.fm_update_timer.start(300)
+
 
         if self.usbhidmonitor:
             if len(self.usbhidmonitor.cmd_decode.card_cmd_list) > 0:
@@ -510,7 +539,13 @@ class DtqUsbHidDebuger(QWidget):
                 tmp_msg.append(0x00)
         if self.report:
             self.report[0].set_raw_data(tmp_msg)
-            self.report[0].send()
+            try:
+                self.report[0].send()
+            except hid.HIDError:
+                self.open_button.setText(u"打开USB设备")
+                self.com_combo.clear()
+                # self.dev_dict = {}
+                self.alive = False
             tmp_msg = self.usbhidmonitor.cmd_decode.list_export(tmp_msg)
             logging.debug(u"发送数据：S : {0}".format(tmp_msg))
 

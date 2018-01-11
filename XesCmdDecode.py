@@ -33,6 +33,7 @@ class XesCmdDecode():
         self.card_cmd_list = []
         self.rst_cnt_dict  = {}
         self.usb_dfu_state = 0
+        self.iamge_cmd_cnt = 0
         self.ReviceFunSets = {
             0x93 : self.get_device_info,
             0x95 : self.bind_msg_err,
@@ -45,7 +46,8 @@ class XesCmdDecode():
             0x02 : self.update_answer_info,
             0x98 : self.check_wl_info,
             0xA0 : self.fm_image_info_err,
-            0xA1 : self.fm_image_info_err
+            0xA1 : self.fm_image_data_err,
+            0x00 : self.fm_image_ok_err,
         }
 
     def check_wl_info(self,data):
@@ -222,6 +224,30 @@ class XesCmdDecode():
         if data[0] == 0:
             str_err = u"OK!"
             self.usb_dfu_state = 1
+            self.iamge_cmd_cnt = 1
+        else:
+            str_err = u"FIAL!"
+            # self.usb_dfu_state = 0
+        show_str  = "Err  = %s"  % str_err
+        return show_str
+
+    def fm_image_data_err(self,data):
+        self.conf_log = False
+        if data[0] == 0:
+            str_err = u"OK!"
+            self.iamge_cmd_cnt = self.iamge_cmd_cnt + 1
+        else:
+            str_err = u"FIAL!"
+            # self.usb_dfu_state = 0
+        show_str  = "Err  = %s"  % str_err
+        return show_str
+
+    def fm_image_ok_err(self,data):
+        self.conf_log = False
+        self.usb_dfu_state = 2
+        if data[0] == 0:
+            str_err = u"OK!"
+            # self.iamge_cmd_cnt = self.iamge_cmd_cnt + 1
         else:
             str_err = u"FIAL!"
             # self.usb_dfu_state = 0
@@ -358,7 +384,7 @@ class XesCmdEncode():
     def usb_dfu_init(self,file_path):
             if file_path :
                 self.file_path = file_path
-                self.file_name = os.path.basename(file_path) #unicode(image_path.toUtf8(),'utf-8','ignore')
+                self.file_name = os.path.basename(file_path)
                 self.file_size = int(os.path.getsize(file_path))
                 print "File Name: %s " % self.file_name
                 print "File Size: %d " % self.file_size
@@ -402,7 +428,7 @@ class XesCmdEncode():
                 self.file_offset = self.file_offset + data_pac_len
             f.close()
 
-            print " file_offset = %d , sum = %d " % ( self.file_offset,self.file_size),;
+            print " file_offset = %5d , sum = %5d " % ( self.file_offset,self.file_size),;
 
             # 封装数据
             # 填充数据偏移
