@@ -13,75 +13,77 @@ import mp3play
 from PyQt4.QtCore import *
 from PyQt4.QtGui  import *
 
-class voice_monitor(QThread):
-    def __init__(self, devid, pos, parent=None):
-        super(voice_monitor, self).__init__(parent)
-        self.working = True
-        self.devid = devid
-        self.pac_start_num = pos
-        self.dat_dict = {}
-        self.max_cnt = 0
-        self.file_name = None
-        self.mp3_file = None
-        self.file_path = None
-        self.mp3_player = None
-        self.new_data = None
-        self.rev_state = None
-
-    def __del__(self):
-        self.working = False
-        self.wait()
-
-    def get_update_file_name(self):
-        # 打印提示信息
-        voice_time = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
-        self.file_name = "VOICE_%08X_%s.mp3" % (self.devid, voice_time)
-        print u"[ %08x ]:录音开始 :%s！" % (self.devid, self.file_name)
-
-    def run(self):
-        while self.working == True:
-            if self.new_data:
-                # 数据开始检查
-                if self.rev_state == None:
-                    self.get_update_file_name()
-                    self.rev_state = 1
-                # 语音数据分析
-                if self.new_data["FLG"] == 0:
-                    self.dat_dict[self.new_data["POS"]] = self.new_data["DATA"]
-                else:
-                    self.dat_dict[self.new_data["POS"]] = self.new_data["DATA"]
-                    # 转换文件
-                    pos = self.new_data["POS"]
-                    cnt = 0
-                    self.file_path = os.path.abspath("./") + '\\VOICE\\%s' % (self.file_name)
-                    self.mp3_file = open(self.file_path, 'wb')
-                    for item in range(self.pac_start_num, pos+1):
-                        if item in self.dat_dict:
-                            self.mp3_file.write(bytearray(self.dat_dict[item])) 
-                            cnt = cnt + 1
-                    self.mp3_file.close()
-                    # 播放测试
-                    print u"[ %08x ]:数据记录 :发送数据包[%d], 接收数据包[%d]！" % \
-                        (self.devid, pos+1-self.pac_start_num, cnt)
-                    print u"[ %08x ]:播放测试 :%s！" % (self.devid, self.file_name)
-                    self.mp3_player = mp3play.load(self.file_path)
-                    self.mp3_player.play()
-                    time.sleep(self.mp3_player.seconds())
-                    self.mp3_player.stop()
-                    self.rev_state = None
-                self.new_data = {}
-
-class XesHT46():
+class voice_decode():
     def __init__(self, devid):
-        self.devid = devid
-        self.cur_seq = 0
-        self.cur_cmd = 0
-        self.voice_monitor = None
+        # 语音数据管理
+        self.devid = devid    # 设备ID
+        self.voice_dict = {}  # 语音数据缓冲区
+        self.start_pos = 0    # 起始包包号
+        self.stop_pos = 0     # 结束包包号
+        self.pac_cnt = 0      # 语音数据包计数器
+        self.f_name = None    # MP3 文件名
+        self.f_path = None    # MP3 文件存放路径
+        self.player = None    # MP3 播放器实例
+        self.state = 0        # 解析数据状态机：状态
+        self.state_step = {
+            0: self.get_update_f_name,
+            1: self.decode_porcess
+        }
+        # 通用数据管理
+        self.rev_seq = 0
+        self.send_seq = 0
 
+    # 答题器包号管理
     def seq_add(self):
-        self.cur_seq = self.cur_seq + 1
+        self.send_seq = self.send_seq + 1
 
-class XesHT46Pro():
+    # 打印提示信息
+    def get_update_f_name(self, vocie_msg):
+        voice_time = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
+        self.f_name = "VOICE_%08X_%s.mp3" % (self.devid, voice_time)
+        print u"[ %08x ]:录音开始 :%s！" % (self.devid, self.f_name)
+        # 记录初始数据
+        self.start_pos = vocie_msg["POS"]
+        self.voice_dict[vocie_msg["POS"]] = vocie_msg["DATA"]
+        # 切换状态
+        self.state = 1
+
+    # 播放测试
+    def play(self, vocie_msg):
+        print u"[ %08x ]:播放测试 :%s！" % (self.devid, self.f_name)
+        self.player = mp3play.load(self.f_path)
+        self.player.play()
+        time.sleep(self.player.seconds())
+        self.player.stop()
+
+    # 转换文件
+    def decode(self, vocie_msg):
+        self.pac_cnt = 0
+        self.f_path = os.path.abspath("./") + '\\VOICE\\%s' % (self.f_name)
+        f = open(self.f_path, 'wb')
+        for item in range(self.start_pos, self.stop_pos+1):
+            if item in self.voice_dict:
+                f.write(bytearray(self.voice_dict[item])) 
+                self.pac_cnt = self.pac_cnt + 1
+        f.close()
+        print u"[ %08x ]:数据记录 :发送数据包[%d], 接收数据包[%d]！" % \
+            (self.devid, self.stop_pos+1-self.start_pos, self.pac_cnt)
+
+    def decode_porcess(self, vocie_msg):
+        # 语音数据分析
+        if vocie_msg["FLG"] == 0:
+            self.voice_dict[vocie_msg["POS"]] = vocie_msg["DATA"]
+        else:
+            self.voice_dict[vocie_msg["POS"]] = vocie_msg["DATA"]
+            self.stop_pos = vocie_msg["POS"]
+            # 解码
+            self.decode()
+            # 播放测试（用户双击答题器ID主动播放）
+            # self.play()
+            # 切换状态
+            self.state = 0
+
+class dtq_xes_ht46():
     def __init__(self):
         self.PAC_LEN = 257
         self.dtqdict = {}
@@ -177,11 +179,10 @@ class XesHT46Pro():
         time_arr.append(self.dec_to_bcd(cur_time.hour))     # 时
         time_arr.append(self.dec_to_bcd(cur_time.minute))   # 分
         time_arr.append(self.dec_to_bcd(cur_time.second))   # 秒
-        tmp = self.dec_to_bcd(cur_time.microsecond / 10000) # 毫秒
+        tmp = self.dec_to_bcd(cur_time.microsecond/10000)   # 毫秒
         time_arr.append(tmp)
-        tmp = self.dec_to_bcd((cur_time.microsecond / 100) % 100)
+        tmp = self.dec_to_bcd((cur_time.microsecond/100) % 100)
         time_arr.append(tmp)
-
         return time_arr
 
     def get_arr_time_str(self, arr):
@@ -190,12 +191,10 @@ class XesHT46Pro():
         return time_str
 
     # 添加白名单
-    def dtqdict_add(self, devid):
-        if devid in self.dtqdict:
-            return self.dtqdict[devid]
-        else:
-            self.dtqdict[devid] = XesHT46(devid)
-            return self.dtqdict[devid]
+    def get_dtq_tcb(self, devid):
+        if devid not in self.dtqdict:
+            self.dtqdict[devid] = voice_decode(devid)
+        return self.dtqdict[devid]
 
     '''
         协议下发指令生成函数
@@ -203,14 +202,14 @@ class XesHT46Pro():
     # 下发回显指令
     def get_echo_cmd_msg(self, devid, msg):
         echo_msg = []
-        curdev = self.dtqdict_add(devid)
+        dtq_tcb = self.get_dtq_tcb(devid)
         # 填充设备ID
-        uid_arr = self.get_uid_hex_arr(curdev.devid)
+        uid_arr = self.get_uid_hex_arr(dtq_tcb.devid)
         for item in uid_arr:
             echo_msg.append(item)
         # 填充包序号
-        curdev.seq_add()
-        seq_arr = self.get_seq_hex_arr(curdev.cur_seq)
+        dtq_tcb.seq_add()
+        seq_arr = self.get_seq_hex_arr(dtq_tcb.send_seq)
         for item in seq_arr:
             echo_msg.append(item)
         # 设置包指令
@@ -292,38 +291,6 @@ class XesHT46Pro():
     def get_bind_stop_msg(self):
         return self.get_jsq_cmd_init("BIND_STOP")
 
-    '''
-        协议上报指令解析函数
-    '''
-    def answer_cmd_decode(self, msg_arr):
-        if msg_arr:
-            pac_info = {}
-            rpos = 1
-            pac_info["UID"] = self.get_dec_uid(msg_arr[rpos:rpos+4])
-            curdev = self.dtqdict_add(pac_info["UID"])
-            rpos = rpos + 4
-            pac_info["SEQ"] = self.get_dec_uid(msg_arr[rpos:rpos+4])
-            rpos = rpos + 4
-            cur_cmd = msg_arr[rpos:rpos+1][0]
-            rpos = rpos + 1
-            if cur_cmd in self.decode_cmds_name:
-                pac_info["CMD"] = self.decode_cmds_name[cur_cmd]
-                pac_info["LEN"] = msg_arr[rpos:rpos+1][0]
-                rpos = rpos + 1
-                if cur_cmd in self.decode_cmds:
-                    if cur_cmd > 0x80:
-                        pac_info["RESULT"] = self.decode_cmds[cur_cmd](curdev, msg_arr[rpos:])
-                    else:
-                        pac_info["MSG"] = self.decode_cmds[cur_cmd](curdev, msg_arr[rpos:])
-                else:
-                    print "NOP PROCESS!"
-                    return None
-            else:
-                print "UNKONW CMD!"
-                return None
-            
-            return pac_info
-
     # 下发题目指令操作结果返回
     def answer_info_err(self, dtq, msg_arr):
         if msg_arr[0] == 0:
@@ -332,7 +299,7 @@ class XesHT46Pro():
             return False
 
     # 上报答案格式解析
-    def answer_info_decode(self, dtq, msg_arr):
+    def answer_info_decode(self, dtq_tcb, msg_arr):
         answer_info = {}
         rpos = 0
         answer_info["RSSI"] = msg_arr[rpos:rpos+1][0]
@@ -356,34 +323,55 @@ class XesHT46Pro():
         return answer_info
 
     # 上报语音格式解析
-    def answer_voice_update(self, dtq, voice_arr):
-        voice_info = {}
+    def answer_voice_update(self, dtq_tcb, voice_arr):
         voice_msg = {}
         rpos = 0
-        voice_info["RSSI"] = voice_arr[rpos:rpos+1][0]
         voice_msg["RSSI"] = voice_arr[rpos:rpos+1][0]
         rpos = rpos + 1
-        voice_info["FLG"] = voice_arr[rpos:rpos+1][0]
         voice_msg["FLG"] = voice_arr[rpos:rpos+1][0]
         rpos = rpos + 1
         pac_num = voice_arr[rpos:rpos+2]
-        voice_info["POS"] = (pac_num[0] << 8 | pac_num[1])
         voice_msg["POS"] = (pac_num[0] << 8 | pac_num[1])
-        if dtq.voice_monitor == None:
-            dtq.voice_monitor = voice_monitor(dtq.devid, voice_msg["POS"])
-            dtq.voice_monitor.start()
         rpos = rpos + 2
-        voice_msg["DATA"] = voice_arr[rpos:rpos+208]
-        # 送入其他进程处理
-        dtq.voice_monitor.new_data = voice_msg
+        dtq_tcb.state_step[dtq_tcb.state](voice_arr[rpos:rpos+208])
         # 返回处理结果
-        return voice_info
+        return voice_msg
 
+    '''
+        协议上报指令解析函数
+    '''
+    def answer_cmd_decode(self, msg_arr):
+        if msg_arr:
+            pac_info = {}
+            rpos = 1
+            pac_info["UID"] = self.get_dec_uid(msg_arr[rpos:rpos+4])
+            dtq_tcb = self.get_dtq_tcb(pac_info["UID"])
+            rpos = rpos + 4
+            pac_info["SEQ"] = self.get_dec_uid(msg_arr[rpos:rpos+4])
+            rpos = rpos + 4
+            cur_cmd = msg_arr[rpos:rpos+1][0]
+            rpos = rpos + 1
+            if cur_cmd in self.decode_cmds_name:
+                pac_info["CMD"] = self.decode_cmds_name[cur_cmd]
+                pac_info["LEN"] = msg_arr[rpos:rpos+1][0]
+                rpos = rpos + 1
+                if cur_cmd in self.decode_cmds:
+                    if cur_cmd > 0x80:
+                        pac_info["RESULT"] = self.decode_cmds[cur_cmd](dtq_tcb, msg_arr[rpos:])
+                    else:
+                        pac_info["MSG"] = self.decode_cmds[cur_cmd](dtq_tcb, msg_arr[rpos:])
+                else:
+                    print "NOP PROCESS!"
+                    return None
+            else:
+                print "UNKONW CMD!"
+                return None
+            return pac_info
 
 if __name__=='__main__':
     wl_dict = {}
     uid_arr = [0x01, 0x02, 0x03, 0x04]
-    xes_decode = XesHT46Pro()
+    xes_decode = dtq_xes_ht46()
     uid_dec = xes_decode.get_dec_uid(uid_arr)
     print "Arr to dec:",
     print uid_dec
@@ -443,17 +431,17 @@ if __name__=='__main__':
         echo_arr_str += "%02X " % item
     print echo_arr_str
 
-    print u"上传答题器指令"
-    answer_info_msg = [0xAA, 0xBB, 0xCC, 0xDD,            # UID
-    0x00, 0x00, 0x00, 0x01,                               # SEQ
-    0x30,                                                 # RSSI
-    0x20, 0x18, 0x03, 0x08, 0x17, 0x56, 0x02, 0x01, 0x00, # TIME
-    0x00, 0x00, 0x00, 0x01,                               # PRESS_CNT
-    0x00, 0x00, 0x00, 0x01,                               # KEY_CNT
-    0x00, 0x00, 0x00, 0x01,                               # SEND_CNT
-    0x00, 0x00, 0x00, 0x01,                               # ECHO_CNT
-    0x01,                                                 # ANSWER_TYPE 
-    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01]
-    print u"解析结果如下"
-    answer_decode_msg = xes_decode.answer_info_decode(answer_info_msg)
-    print answer_decode_msg
+    # print u"上传答题器指令"
+    # answer_info_msg = [0xAA, 0xBB, 0xCC, 0xDD,            # UID
+    # 0x00, 0x00, 0x00, 0x01,                               # SEQ
+    # 0x30,                                                 # RSSI
+    # 0x20, 0x18, 0x03, 0x08, 0x17, 0x56, 0x02, 0x01, 0x00, # TIME
+    # 0x00, 0x00, 0x00, 0x01,                               # PRESS_CNT
+    # 0x00, 0x00, 0x00, 0x01,                               # KEY_CNT
+    # 0x00, 0x00, 0x00, 0x01,                               # SEND_CNT
+    # 0x00, 0x00, 0x00, 0x01,                               # ECHO_CNT
+    # 0x01,                                                 # ANSWER_TYPE 
+    # 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01]
+    # print u"解析结果如下"
+    # answer_decode_msg = xes_decode.answer_info_decode(answer_info_msg)
+    # print answer_decode_msg

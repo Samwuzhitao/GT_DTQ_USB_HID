@@ -4,13 +4,13 @@
 * Description : HID 调试器主文件
 * Input       : None
 '''
-from DEV_DTQ_HT46 import *
-from QProcessEntry import *
 import sys
 import logging
 import random
 import pywinusb.hid as hid
 from  serial.tools import list_ports
+from dtq_ht46_driver import *
+from qprocess import *
 
 # 配置日志输出的方式及格式
 LOG_TIME = time.strftime('%Y%m%d%H', time.localtime(time.time()))
@@ -30,7 +30,7 @@ class dtq_hid_debuger(QWidget):
     def __init__(self, parent=None):
         super(dtq_hid_debuger, self).__init__(parent)
         # 设备协议
-        self.dev_pro = None
+        self.ht46_pro = None
         # 接收数据缓冲区
         self.rev_buf = []
         self.buf_cnt = 0
@@ -191,6 +191,21 @@ class dtq_hid_debuger(QWidget):
         # 创建并启动 USB 数据解析进程
         self.usb_rbuf_process = QProcessEntry(self.usb_cmd_decode)
         self.usb_rbuf_process.start()
+        # 按键双击操作的实现
+        self.connect(self.tree_com, SIGNAL("itemDoubleClicked (QTreeWidgetItem *,int)"),
+            self.tree_com_itemDoubleClicked)
+
+        for dev_id in range(90, 100):
+            self.qtree_dict[dev_id] = QTreeWidgetItem(self.tree_com)
+            self.qtree_dict[dev_id].setText(0, str(len(self.qtree_dict)))
+            self.qtree_dict[dev_id].setText(1, str(dev_id))
+            self.qtree_dict[dev_id].setText(9, str(dev_id))
+
+    # 双击获取设备ID
+    def tree_com_itemDoubleClicked(self, item, column):
+        devid = unicode(item.text(1))
+        print devid,column
+
 
     def q_combo_changed_callback(self):
         q_type = unicode(self.q_combo.currentText())
@@ -255,7 +270,7 @@ class dtq_hid_debuger(QWidget):
         for item in msg:
             tmp_msg.append(item)
         # 没有满的数据自动补0
-        for item_pos in range(len(tmp_msg), self.dev_pro.PAC_LEN):
+        for item_pos in range(len(tmp_msg), self.ht46_pro.PAC_LEN):
             tmp_msg.append(0x00)
         # 发送数据
         if self.report:
@@ -296,7 +311,8 @@ class dtq_hid_debuger(QWidget):
     def usb_cmd_decode(self):
         if len(self.rev_buf) > 0:
             tmp_msg = self.rev_buf.pop()
-            res_dict = self.dev_pro.answer_cmd_decode(tmp_msg)
+            # 此处指令解析放在协议文件的内部实现，方便实现硬件的兼容
+            res_dict = self.ht46_pro.answer_cmd_decode(tmp_msg)
             logging.debug(u"接收数据：R : {0}".format(res_dict))
             dev_id = res_dict[u"UID"]
             # 答题器数据统计
@@ -336,7 +352,7 @@ class dtq_hid_debuger(QWidget):
                 self.dev_dict[usb_port].set_raw_data_handler(self.usb_show_hook)
                 self.report = self.dev_dict[usb_port].find_output_reports()
                 self.alive = True
-                self.dev_pro = XesHT46Pro()
+                self.ht46_pro = dtq_xes_ht46()
                 self.browser.append(u"打开设备:[ %s ] 成功！" % usb_port )
                 self.open_button.setText(u"关闭USB设备")
 
@@ -355,7 +371,7 @@ class dtq_hid_debuger(QWidget):
                 que_t = int(q_type.split(":")[1][2:])
                 self.browser.clear()
                 cur_msg   = unicode(self.q_lineedit.text())
-                msg = self.dev_pro.get_question_cmd_msg( que_t, cur_msg )
+                msg = self.ht46_pro.get_question_cmd_msg( que_t, cur_msg )
                 self.usb_hid_send_msg( msg )
                 self.browser.append(u"S : 发送题目 : %s : %s " % ( q_type, cur_msg ))
                 
