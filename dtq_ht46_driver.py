@@ -12,6 +12,7 @@ import os
 import mp3play
 from PyQt4.QtCore import *
 from PyQt4.QtGui  import *
+from qprocess import *
 
 class voice_decode():
     def __init__(self, devid):
@@ -37,19 +38,8 @@ class voice_decode():
     def seq_add(self):
         self.send_seq = self.send_seq + 1
 
-    # 打印提示信息
-    def get_update_f_name(self, vocie_msg):
-        voice_time = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
-        self.f_name = "VOICE_%08X_%s.mp3" % (self.devid, voice_time)
-        print u"[ %08x ]:录音开始 :%s！" % (self.devid, self.f_name)
-        # 记录初始数据
-        self.start_pos = vocie_msg["POS"]
-        self.voice_dict[vocie_msg["POS"]] = vocie_msg["DATA"]
-        # 切换状态
-        self.state = 1
-
     # 播放测试
-    def play(self, vocie_msg):
+    def play(self):
         print u"[ %08x ]:播放测试 :%s！" % (self.devid, self.f_name)
         self.player = mp3play.load(self.f_path)
         self.player.play()
@@ -57,7 +47,7 @@ class voice_decode():
         self.player.stop()
 
     # 转换文件
-    def decode(self, vocie_msg):
+    def decode(self):
         self.pac_cnt = 0
         self.f_path = os.path.abspath("./") + '\\VOICE\\%s' % (self.f_name)
         f = open(self.f_path, 'wb')
@@ -69,17 +59,28 @@ class voice_decode():
         print u"[ %08x ]:数据记录 :发送数据包[%d], 接收数据包[%d]！" % \
             (self.devid, self.stop_pos+1-self.start_pos, self.pac_cnt)
 
-    def decode_porcess(self, vocie_msg):
+    # 打印提示信息
+    def get_update_f_name(self, voice_info, vocie_msg):
+        voice_time = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
+        self.f_name = "VOICE_%08X_%s.mp3" % (self.devid, voice_time)
+        print u"[ %08x ]:录音开始 :%s！" % (self.devid, self.f_name)
+        # 记录初始数据
+        print voice_info
+        if voice_info["FLG"] == 0:
+            self.start_pos = voice_info["POS"]
+            self.voice_dict[voice_info["POS"]] = vocie_msg
+            # 切换状态
+            self.state = 1
+
+    def decode_porcess(self, voice_info, vocie_msg):
         # 语音数据分析
-        if vocie_msg["FLG"] == 0:
-            self.voice_dict[vocie_msg["POS"]] = vocie_msg["DATA"]
-        else:
-            self.voice_dict[vocie_msg["POS"]] = vocie_msg["DATA"]
-            self.stop_pos = vocie_msg["POS"]
+        if voice_info["FLG"] == 0:
+            self.voice_dict[voice_info["POS"]] = vocie_msg
+        if voice_info["FLG"] == 1:
+            self.voice_dict[voice_info["POS"]] = vocie_msg
+            self.stop_pos = voice_info["POS"]
             # 解码
             self.decode()
-            # 播放测试（用户双击答题器ID主动播放）
-            # self.play()
             # 切换状态
             self.state = 0
 
@@ -104,12 +105,18 @@ class dtq_xes_ht46():
         self.decode_cmds_name = {
             0x81: "ANSWER_INFO",
             0x02: "DTQ_ANSWER",
-            0x03: "DTQ_VOICE"
+            0x03: "DTQ_VOICE",
+            0x16: "CARD_ID",
+            0x84: "ECHO_IFNO",
+            0x93: "DEVICE_INFO"
         }
         self.decode_cmds = {
             0x81: self.answer_info_err,
             0x02: self.answer_info_decode,
             0x03: self.answer_voice_update,
+            0x16: self.card_id_update,
+            0x84: self.answer_info_err,
+            0x93: self.dev_info_msg_update
             # 0x91: self.set_rfch_err,
             # 0x93: self.dev_info_update,
             # 0x94: self.clear_set_err,
@@ -129,15 +136,13 @@ class dtq_xes_ht46():
         return msg_arr
 
     # UID 转化函数
-    def get_dec_uid(self, uid_arr):
-        return ((uid_arr[0] << 24) | (uid_arr[1] << 16) |
-                (uid_arr[2] << 8) | uid_arr[3])
+    def uid_pos_code(self, uid_arr):
+        return ((uid_arr[0] << 24) | (uid_arr[1] << 16) | (uid_arr[2] << 8) | uid_arr[3])
 
-    def uid_negative(self, uid):
-        return (((uid & 0xFF000000) >> 24) | ((uid & 0x00FF0000) >> 8) |
-                ((uid & 0x0000FF00) << 8) | ((uid & 0x000000FF) << 24))
+    def uid_neg_code(self, uid_arr):
+        return ((uid_arr[3] << 24) | (uid_arr[2] << 16) | (uid_arr[1] << 8) | uid_arr[0])
 
-    def get_uid_hex_arr(self, uid):
+    def get_uid_arr_neg(self, uid):
         uid_arr = []
         tmp = (uid & 0xFF000000) >> 24
         uid_arr.append(tmp)
@@ -146,6 +151,18 @@ class dtq_xes_ht46():
         tmp = (uid & 0xFF00) >> 8
         uid_arr.append(tmp)
         tmp = (uid & 0xFF)
+        uid_arr.append(tmp)
+        return uid_arr
+    
+    def get_uid_arr_pos(self, uid):
+        uid_arr = []
+        tmp = (uid & 0xFF)
+        uid_arr.append(tmp)
+        tmp = (uid & 0xFF00) >> 8
+        uid_arr.append(tmp)
+        tmp = (uid & 0xFF0000) >> 16
+        uid_arr.append(tmp)
+        tmp = (uid & 0xFF000000) >> 24
         uid_arr.append(tmp)
         return uid_arr
 
@@ -204,7 +221,7 @@ class dtq_xes_ht46():
         echo_msg = []
         dtq_tcb = self.get_dtq_tcb(devid)
         # 填充设备ID
-        uid_arr = self.get_uid_hex_arr(dtq_tcb.devid)
+        uid_arr = self.get_uid_arr_pos(dtq_tcb.devid)
         for item in uid_arr:
             echo_msg.append(item)
         # 填充包序号
@@ -304,15 +321,15 @@ class dtq_xes_ht46():
         rpos = 0
         answer_info["RSSI"] = msg_arr[rpos:rpos+1][0]
         rpos = rpos + 1
-        answer_info["TIME"] = self.get_arr_time_str(msg_arr[rpos:rpos+9])
+        # answer_info["TIME"] = self.get_arr_time_str(msg_arr[rpos:rpos+9])
         rpos = rpos + 9
-        answer_info["PRESS"] = self.get_dec_uid(msg_arr[rpos:rpos+4])
+        answer_info["PRESS"] = self.uid_neg_code(msg_arr[rpos:rpos+4])
         rpos = rpos + 4
-        answer_info["KEY"] = self.get_dec_uid(msg_arr[rpos:rpos+4])
+        answer_info["KEY"] = self.uid_neg_code(msg_arr[rpos:rpos+4])
         rpos = rpos + 4
-        answer_info["SEND"] = self.get_dec_uid(msg_arr[rpos:rpos+4])
+        answer_info["SEND"] = self.uid_neg_code(msg_arr[rpos:rpos+4])
         rpos = rpos + 4
-        answer_info["ECHO"] = self.get_dec_uid(msg_arr[rpos:rpos+4])
+        answer_info["ECHO"] = self.uid_neg_code(msg_arr[rpos:rpos+4])
         rpos = rpos + 4
         answer_info["TYPE"] = msg_arr[rpos:rpos+1][0]
         rpos = rpos + 1
@@ -333,9 +350,37 @@ class dtq_xes_ht46():
         pac_num = voice_arr[rpos:rpos+2]
         voice_msg["POS"] = (pac_num[0] << 8 | pac_num[1])
         rpos = rpos + 2
-        dtq_tcb.state_step[dtq_tcb.state](voice_arr[rpos:rpos+208])
+        voice_data = voice_arr[rpos:rpos+208]
+        dtq_tcb.state_step[dtq_tcb.state](voice_msg, voice_data)
         # 返回处理结果
         return voice_msg
+
+   # 上报刷卡格式解析
+    def card_id_update(self, dtq_tcb, msg_arr):
+        card_id_msg = {}
+        rpos = 0
+        card_id_msg["UID"] = self.uid_neg_code(msg_arr[rpos:rpos+4])
+        rpos = rpos + 4
+        card_id_msg["REP_UID"] = self.uid_neg_code(msg_arr[rpos:rpos+4])
+        # 返回处理结果
+        return card_id_msg
+
+    def dev_info_msg_update(self, dtq_tcb, msg_arr):
+        dev_info_msg = {}
+        rpos = 0
+        dev_info_msg["DEVICE_ID"] = self.uid_neg_code(msg_arr[rpos:rpos+4])
+        rpos = rpos + 4
+        dev_info_msg["SF_VERSION"] = "v%d.%d.%d" % (msg_arr[rpos],msg_arr[rpos+1],msg_arr[rpos+2])
+        rpos = rpos + 3
+        # dev_info_msg["HW_VERSION"] = msg_arr[rpos:rpos+15]
+        rpos = rpos + 15
+        # dev_info_msg["COMPLANY"] = msg_arr[rpos:rpos+8]
+        rpos = rpos + 8
+        dev_info_msg["RF_CH"] = msg_arr[rpos:rpos+1][0]
+        rpos = rpos + 1
+        dev_info_msg["RF_TX_POWER"] = msg_arr[rpos:rpos+1][0]
+        # 返回处理结果
+        return dev_info_msg
 
     '''
         协议上报指令解析函数
@@ -344,22 +389,20 @@ class dtq_xes_ht46():
         if msg_arr:
             pac_info = {}
             rpos = 1
-            pac_info["UID"] = self.get_dec_uid(msg_arr[rpos:rpos+4])
+            pac_info["UID"] = self.uid_neg_code(msg_arr[rpos:rpos+4])
             dtq_tcb = self.get_dtq_tcb(pac_info["UID"])
             rpos = rpos + 4
-            pac_info["SEQ"] = self.get_dec_uid(msg_arr[rpos:rpos+4])
+            pac_info["SEQ"] = self.uid_pos_code(msg_arr[rpos:rpos+4])
             rpos = rpos + 4
             cur_cmd = msg_arr[rpos:rpos+1][0]
             rpos = rpos + 1
+            print "REV_CMD : %02x " % cur_cmd
             if cur_cmd in self.decode_cmds_name:
                 pac_info["CMD"] = self.decode_cmds_name[cur_cmd]
                 pac_info["LEN"] = msg_arr[rpos:rpos+1][0]
                 rpos = rpos + 1
                 if cur_cmd in self.decode_cmds:
-                    if cur_cmd > 0x80:
-                        pac_info["RESULT"] = self.decode_cmds[cur_cmd](dtq_tcb, msg_arr[rpos:])
-                    else:
-                        pac_info["MSG"] = self.decode_cmds[cur_cmd](dtq_tcb, msg_arr[rpos:])
+                    pac_info["MSG"] = self.decode_cmds[cur_cmd](dtq_tcb, msg_arr[rpos:])
                 else:
                     print "NOP PROCESS!"
                     return None
@@ -370,12 +413,11 @@ class dtq_xes_ht46():
 
 if __name__=='__main__':
     wl_dict = {}
-    uid_arr = [0x01, 0x02, 0x03, 0x04]
     xes_decode = dtq_xes_ht46()
-    uid_dec = xes_decode.get_dec_uid(uid_arr)
+    uid_dec = xes_decode.get_uid_arr_neg( 0x11223344 )
     print "Arr to dec:",
     print uid_dec
-    print u"输入回下参数：%d %s" % (uid_dec, u"恭喜你！答对了")
+    print u"输入回下参数：%02x%02x%02x%02x %s" % (uid_dec[0],uid_dec[1],uid_dec[2],uid_dec[3], u"恭喜你！答对了")
     echo_arr = xes_decode.get_echo_cmd_msg(0x061D942D, u"恭喜你！答对了")
     print u"输出指令数组：",
     echo_arr_str = ""

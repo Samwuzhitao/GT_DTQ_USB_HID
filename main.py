@@ -29,26 +29,19 @@ logging.basicConfig (
 class dtq_hid_debuger(QWidget):
     def __init__(self, parent=None):
         super(dtq_hid_debuger, self).__init__(parent)
-        # 设备协议
-        self.ht46_pro = None
         # 接收数据缓冲区
         self.rev_buf = []
         self.buf_cnt = 0
-        # 表格UID名单
+        # 表格 UID名单
         self.qtree_dict = {}
         self.dtq_cnt_dict = {}
-
-        self.test_rf_ch = 1
-        self.dev_dict = {}
+        self.mp3_player_dict = {}
         self.uid_list = []
-        self.report = None
-        self.send_msg = u"恭喜你！答对了"
-        self.send_cnt = {}
-        
-        self.card_cnt_dict = {}
+        # USB 设备管理
+        self.dev_dict = {}
         self.alive = False
-        self.pp_test_flg = False
-        self.xes_dev = None
+        self.ht46_pro = None # 设备协议
+  
         self.setWindowTitle(u"USB HID调试工具v2.0.0")
         self.com_combo = QComboBox(self)
         self.com_combo.setFixedSize(170, 20)
@@ -137,9 +130,9 @@ class dtq_hid_debuger(QWidget):
         q_hbox.addWidget(self.q_button)
 
         self.browser = QTextBrowser ()
-        self.browser.setFixedHeight(80)
+        self.browser.setFixedHeight(160)
         self.conf_browser = QTextBrowser ()
-        self.conf_browser.setFixedHeight(40)
+        self.conf_browser.setFixedHeight(80)
 
         self.tree_com = QTreeWidget()
         self.tree_com.setFont(QFont(u"答题器数据统计", 8, False))
@@ -147,6 +140,8 @@ class dtq_hid_debuger(QWidget):
         self.tree_com.setHeaderLabels([u'序号', u'uID', 
             u'按键次数', u'接收次数', u'回显次数', u'计数初值', 
             u'当前计数值', u'刷卡次数',u'重启次数',u'语音包接收'])
+        self.tree_name_pos = {"DTQ_ANSWER": 3, "DTQ_VOICE": 9, 
+        u'CARD_ID':7 }
         self.tree_com.setColumnWidth(0, 50)
         for pos in range(1, 9):
             self.tree_com.setColumnWidth(pos, 75)
@@ -178,34 +173,25 @@ class dtq_hid_debuger(QWidget):
         self.fm_add_button.clicked.connect(self.btn_event_callback)
         self.fm_update_button.clicked.connect(self.btn_event_callback)
         self.q_combo.currentIndexChanged.connect(self.q_combo_changed_callback)
-        # 创建回显压测定时器
-        self.echo_timer = QTimer()
-        self.echo_timer.timeout.connect(self.usb_hid_echo_data)
         # 下载数据处理进程
         self.image_timer = QTimer()
         self.image_timer.timeout.connect(self.usb_dfu_process)
-        # 创建并启动 GUI 数据刷新进程
-        self.gui_flash_timer = QTimer()
-        self.gui_flash_timer.timeout.connect(self.qtree_dict_gui_flash)
-        self.gui_flash_timer.start(200)
         # 创建并启动 USB 数据解析进程
-        self.usb_rbuf_process = QProcessEntry(self.usb_cmd_decode)
+        self.usb_rbuf_process = QProcessNoStop(self.usb_cmd_decode)
         self.usb_rbuf_process.start()
         # 按键双击操作的实现
         self.connect(self.tree_com, SIGNAL("itemDoubleClicked (QTreeWidgetItem *,int)"),
             self.tree_com_itemDoubleClicked)
 
-        for dev_id in range(90, 100):
-            self.qtree_dict[dev_id] = QTreeWidgetItem(self.tree_com)
-            self.qtree_dict[dev_id].setText(0, str(len(self.qtree_dict)))
-            self.qtree_dict[dev_id].setText(1, str(dev_id))
-            self.qtree_dict[dev_id].setText(9, str(dev_id))
-
     # 双击获取设备ID
     def tree_com_itemDoubleClicked(self, item, column):
-        devid = unicode(item.text(1))
-        print devid,column
-
+        cur_dev = int(unicode(item.text(1)))
+        if cur_dev in self.ht46_pro.dtqdict:
+            if cur_dev in self.mp3_player_dict:
+                self.mp3_player_dict[cur_dev].start()
+            else:
+                self.mp3_player_dict[cur_dev] = QProcessOneShort(self.ht46_pro.dtqdict[cur_dev].play)
+                self.mp3_player_dict[cur_dev].start()
 
     def q_combo_changed_callback(self):
         q_type = unicode(self.q_combo.currentText())
@@ -293,17 +279,6 @@ class dtq_hid_debuger(QWidget):
         self.rev_buf.append(data)
 
     '''
-    * Fun Name    : qtree_dict_gui_flash
-    * Description : GUI 界面更新
-    * Input       : None
-    '''
-    def qtree_dict_gui_flash(self):
-        if self.qtree_dict:
-            for item in self.qtree_dict:
-                if item in self.dtq_cnt_dict:
-                    self.qtree_dict[item].setText(9, str(self.dtq_cnt_dict[item]["VOICE_CNT"]))
-
-    '''
     * Fun Name    : usb_cmd_decode
     * Description : 数据解析函数
     * Input       : None
@@ -314,23 +289,52 @@ class dtq_hid_debuger(QWidget):
             # 此处指令解析放在协议文件的内部实现，方便实现硬件的兼容
             res_dict = self.ht46_pro.answer_cmd_decode(tmp_msg)
             logging.debug(u"接收数据：R : {0}".format(res_dict))
-            dev_id = res_dict[u"UID"]
-            # 答题器数据统计
+            dev_id = 0
+            # 获取指令中的ID
+            if res_dict["CMD"] == "CARD_ID":
+                dev_id = res_dict["MSG"]["UID"]
+                self.uid_list.append(dev_id)
+            else:
+                dev_id = res_dict[u"UID"]
+
             if dev_id > 0:
+                 # 增加统计实例
+                if dev_id not in self.dtq_cnt_dict:
+                    self.dtq_cnt_dict[dev_id] = {}
+
                 # 统计数据更新
-                if res_dict["CMD"] == "DTQ_VOICE":
-                    if dev_id in self.dtq_cnt_dict:
-                        self.dtq_cnt_dict[dev_id]["VOICE_CNT"] = self.dtq_cnt_dict[dev_id]["VOICE_CNT"] + 1
-                    else:
-                        self.dtq_cnt_dict[dev_id] = {}
-                        self.dtq_cnt_dict[dev_id]["VOICE_CNT"] = 1
-                # GUI 界面初始化
+                if res_dict["CMD"] in self.dtq_cnt_dict[dev_id]:
+                    if res_dict["CMD"] in self.tree_name_pos:
+                        self.dtq_cnt_dict[dev_id][res_dict["CMD"]] = self.dtq_cnt_dict[dev_id][res_dict["CMD"]] + 1
+                        self.qtree_dict[dev_id].setText(self.tree_name_pos[res_dict["CMD"]],
+                            str(self.dtq_cnt_dict[dev_id][res_dict["CMD"]]))
+                else:
+                    self.dtq_cnt_dict[dev_id][res_dict["CMD"]] = 1
+                    if dev_id in self.qtree_dict:
+                        if res_dict["CMD"] in self.tree_name_pos:
+                            self.qtree_dict[dev_id].setText(self.tree_name_pos[res_dict["CMD"]],
+                                str(self.dtq_cnt_dict[dev_id][res_dict["CMD"]]))
+            # 生成显示数据
+            if res_dict["CMD"] == "DTQ_ANSWER":
+                amswer_msg_str = "R: [ %10u ] [ %10u ] RSSI:-%d [ PRESS:%d KEY:%d SEND:%d ECHO:%d ] TYPE:%d ANSWERS:" % \
+                (dev_id, res_dict["SEQ"], res_dict["MSG"]["RSSI"], res_dict["MSG"]["PRESS"], res_dict["MSG"]["KEY"], \
+                res_dict["MSG"]["SEND"], res_dict["MSG"]["ECHO"], res_dict["MSG"]["KEY"])
+                amswer_msg_str = amswer_msg_str + u" {0}".format(res_dict["MSG"]["ANSWERS"])
+            else:
+                amswer_msg_str = u"R: {0}".format(res_dict)
+            # 显示LOG
+            if res_dict["CMD"] != "DTQ_VOICE":
+                print amswer_msg_str
+                self.browser.append(amswer_msg_str)
+            # GUI 界面初始化
+            if dev_id > 0:
                 if dev_id not in self.qtree_dict:
                     self.qtree_dict[dev_id] = QTreeWidgetItem(self.tree_com)
                     self.qtree_dict[dev_id].setText(0, str(len(self.qtree_dict)))
                     self.qtree_dict[dev_id].setText(1, str(dev_id))
-                    self.qtree_dict[dev_id].setText(9, str(self.dtq_cnt_dict[dev_id]["VOICE_CNT"]))
-
+                    if res_dict["CMD"] in self.tree_name_pos:
+                        self.qtree_dict[dev_id].setText(self.tree_name_pos[res_dict["CMD"]],
+                            str(self.dtq_cnt_dict[dev_id][res_dict["CMD"]]))
     '''
     * Fun Name    : btn_event_callback
     * Description : 按键处理回调函数
@@ -344,6 +348,7 @@ class dtq_hid_debuger(QWidget):
         button_str = button.text()
         if button_str == u"清空数据":
             self.browser.clear()
+            self.conf_browser.clear()
 
         if button_str == u"打开USB设备":
             usb_port = str(self.com_combo.currentText())
@@ -353,7 +358,7 @@ class dtq_hid_debuger(QWidget):
                 self.report = self.dev_dict[usb_port].find_output_reports()
                 self.alive = True
                 self.ht46_pro = dtq_xes_ht46()
-                self.browser.append(u"打开设备:[ %s ] 成功！" % usb_port )
+                self.conf_browser.append(u"打开设备:[ %s ] 成功！" % usb_port )
                 self.open_button.setText(u"关闭USB设备")
 
         if button_str == u"关闭USB设备":
@@ -362,19 +367,40 @@ class dtq_hid_debuger(QWidget):
             if self.dev_dict[usb_port]:
                 self.dev_dict[usb_port].close()
                 self.report = None
-                self.browser.append(u"关闭设备成功！")
+                self.conf_browser.append(u"关闭设备成功！")
             self.open_button.setText(u"打开USB设备")
 
         if button_str == u"发送题目":
             q_type =  unicode(self.q_combo.currentText())
             if self.alive:
                 que_t = int(q_type.split(":")[1][2:])
-                self.browser.clear()
                 cur_msg   = unicode(self.q_lineedit.text())
                 msg = self.ht46_pro.get_question_cmd_msg( que_t, cur_msg )
                 self.usb_hid_send_msg( msg )
-                self.browser.append(u"S : 发送题目 : %s : %s " % ( q_type, cur_msg ))
-                
+                self.conf_browser.setText(u"S: 发送题目 : %s : %s " % ( q_type, cur_msg ))
+
+        if button_str == u"发送数据":
+            if self.qtree_dict:
+                for item in self.uid_list:
+                    cur_msg = unicode(self.cmd_lineedit.text())
+                    msg = self.ht46_pro.get_echo_cmd_msg(item, cur_msg)
+                    self.usb_hid_send_msg(msg)
+                    self.conf_browser.setText(u"S: 发送回显 : UID[ %d ] : %s " % (item, cur_msg))
+            else:
+                self.conf_browser.setText(u"[注意]：白名单为空，请先刷卡！")
+
+        if button_str == u"查看配置":
+            if self.alive:
+                msg = self.ht46_pro.get_check_dev_info_msg()
+                self.usb_hid_send_msg(msg)
+                self.conf_browser.setText(u"S: 查看设备信息 ")
+
+        # if button_str == u"查看白名单":
+        #     if self.alive:
+        #         self.send_msg = u"查看白名单"
+        #         self.usb_hid_send_msg(self.xes_encode.check_wl)
+        #         self.browser.append(u"S : CHECK_WL: %s " % ( self.send_msg ))
+
         # if button_str == u"开始回显压测":
         #     if self.alive:
         #         self.test_button.setText(u"停止回显压测")
@@ -384,21 +410,6 @@ class dtq_hid_debuger(QWidget):
         #     if self.alive:
         #         self.test_button.setText(u"开始回显压测")
         #         self.echo_timer.stop()
-
-        # if button_str == u"发送数据":
-        #     if self.uid_list:
-        #         for item in self.uid_list:
-        #             if self.send_cnt.has_key(item):
-        #                 self.send_cnt[item] =self.send_cnt[item] + 1
-        #             else:
-        #                 self.send_cnt[item] = 1
-        #             cur_msg   = unicode(self.cmd_lineedit.text())
-        #             if cur_msg:
-        #                 self.send_msg = cur_msg
-        #             else:
-        #                 self.send_msg = u"uID:%010d  S_CNT：%d" % (self.xes_encode.uid_negative(item),self.send_cnt[item])
-        #             msg = self.xes_encode.get_echo_cmd_msg( item, self.send_msg )
-        #             self.usb_hid_send_msg( msg )
 
         # if button_str == u"开始绑定":
         #     if self.alive:
@@ -421,12 +432,6 @@ class dtq_hid_debuger(QWidget):
         #         self.usb_hid_send_msg(self.xes_encode.get_ch_cmd_msg(ch))
         #         self.bind_button.setText(u"开始绑定")
         #         self.browser.append(u"S : SET_CH: %d %s " % (ch,self.send_msg ))
-
-        # if button_str == u"查看配置":
-        #     if self.alive:
-        #         self.send_msg = u"查看设备信息"
-        #         self.usb_hid_send_msg(self.xes_encode.get_device_info_msg)
-        #         self.browser.append(u"S : GET_DEVICE_INFO: %s " % ( self.send_msg ))
 
         # if button_str == u"清除配置":
         #     if self.alive:
@@ -571,30 +576,6 @@ class dtq_hid_debuger(QWidget):
         str = "%x" % val
         str_gb2312 = str.decode('hex').decode('gb2312')
         return str_gb2312
-
-    def usb_hid_echo_data(self):
-        if self.uid_list:
-            for item in self.uid_list:
-                if self.send_cnt.has_key(item):
-                    self.send_cnt[item] =self.send_cnt[item] + 1
-                else:
-                    self.send_cnt[item] = 1
-                self.send_msg = u"uID:%010d  S_CNT：%-8d" % (self.xes_encode.uid_negative(item),self.send_cnt[item])
-                rand_str = ""
-                for i in range(8):
-                    rand_str = rand_str + "%s" % self.get_rand_gp2312()
-                self.send_msg = self.send_msg + rand_str
-                msg = self.xes_encode.get_echo_cmd_msg( item, self.send_msg )
-                self.usb_hid_send_msg( msg )
-                # self.browser.append(u"S : ECHO: CARD_ID:[%010d] str:%s" % ( self.xes_encode.uid_negative(item), self.send_msg ))
-
-    def usb_hid_echo_test(self):
-        if self.uid_list:
-            for item in self.uid_list:
-                msg = self.xes_encode.get_echo_cmd_msg( item, self.send_msg )
-                self.usb_hid_send_msg( msg )
-                self.browser.append(u"S : ECHO: CARD_ID:[%010d] str:%s" % ( self.xes_encode.uid_negative(item), self.send_msg ))
-
 
 if __name__=='__main__':
     app = QApplication(sys.argv)

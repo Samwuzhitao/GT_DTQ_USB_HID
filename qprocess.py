@@ -10,9 +10,9 @@
 from PyQt4.QtCore import *
 from PyQt4.QtGui  import *
 
-class QProcessEntry(QThread):
+class QProcessNoStop(QThread):
     def __init__(self, fun, parent=None):
-        super(QProcessEntry, self).__init__(parent)
+        super(QProcessNoStop, self).__init__(parent)
         self.working = True
         self.fun = fun
 
@@ -23,3 +23,14 @@ class QProcessEntry(QThread):
     def run(self):
         while self.working == True:
             self.fun()
+
+class QProcessOneShort(QThread):
+    def __init__(self, fun, parent=None):
+        super(QProcessOneShort, self).__init__(parent)
+        self.fun = fun
+
+    def __del__(self):
+        self.wait()
+
+    def run(self):
+        self.fun()
