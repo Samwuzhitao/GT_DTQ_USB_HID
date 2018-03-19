@@ -43,7 +43,7 @@ class dtq_tcb():
 
     # 播放测试
     def play(self):
-        print u"[ %08x ]:播放测试 :%s！" % (self.devid, self.f_name)
+        print u"[ %010u ]:播放测试 :%s！" % (self.devid, self.f_name)
         self.player = mp3play.load(self.f_path)
         self.player.play()
         time.sleep(self.player.seconds())
@@ -57,19 +57,19 @@ class dtq_tcb():
             if item in self.voice_dict:
                 f.write(bytearray(self.voice_dict[item]))    
         f.close()
-        print u"[ %08x ]:数据记录 :发送数据包[%d], 接收数据包[%d]！" % \
+        print u"[ %010u ]:数据记录 :发送数据包[%d], 接收数据包[%d]！" % \
             (self.devid, self.stop_pos+1-self.start_pos, self.pac_cnt)
-        self.voice_dict.clear()
+        # self.voice_dict.clear()
 
     # 打印提示信息
     def get_update_f_name(self, voice_info, vocie_msg):
         voice_time = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
-        self.f_name = "VOICE_%08X_%s.mp3" % (self.devid, voice_time)
-        print u"[ %08x ]:录音开始 :%s！" % (self.devid, self.f_name)
+        self.f_name = "VOICE_%010u_%s.mp3" % (self.devid, voice_time)
+        print u"[ %010u ]:录音开始 :%s！" % (self.devid, self.f_name)
         # 记录初始数据
         print voice_info
+        self.pac_cnt = 1
         if voice_info["FLG"] == 0:
-            self.pac_cnt = 1
             self.start_pos = voice_info["POS"]
             self.voice_dict[voice_info["POS"]] = vocie_msg
             # 切换状态
@@ -87,8 +87,6 @@ class dtq_tcb():
             self.decode()
             # 切换状态
             self.state = 0
-        # return 
-
 
 class dtq_xes_ht46():
     def __init__(self):
@@ -117,6 +115,9 @@ class dtq_xes_ht46():
             0x84: "ECHO_IFNO",
             0x91: "SET_RFCH",
             0x93: "DEVICE_INFO",
+            0x94: "CLEAR_SET",
+            0x95: "BIND_START",
+            0x97: "BIND_STOP",
             0xA8: "RESET_PORT"
         }
         self.decode_cmds = {
@@ -124,16 +125,13 @@ class dtq_xes_ht46():
             0x02: self.answer_info_decode,
             0x03: self.answer_voice_update,
             0x16: self.card_id_update,
-            0x84: self.answer_info_err,
+            0x84: self.echo_info_err,
             0x91: self.set_rf_ch_err,
             0x93: self.dev_info_msg_update,
-            0xA8: self.port_reset_err
-            # 0x91: self.set_rfch_err,
-            # 0x93: self.dev_info_update,
-            # 0x94: self.clear_set_err,
-            # 0x95: self.bind_start_err,
-            # 0x96: self.bind_stop_err,
-            # 0x97: self.bind_stop
+            0x94: self.bind_clear_conf_err,
+            0xA8: self.port_reset_err,
+            0x95: self.bind_start_err,
+            0x97: self.bind_stop_err,
         }
 
     '''
@@ -321,18 +319,31 @@ class dtq_xes_ht46():
 
     # 下发题目指令操作结果返回
     def answer_info_err(self, show_dev, dtq_tcb, msg_arr):
-        LOG_TIME = str(datetime.datetime.now())
-        show_dev(u"R: 发送题目 : ERR: %d " % ( msg_arr[0]))
-    
+        show_dev(u"R: 发送题目 : ERR: %d " % (msg_arr[0]))
+
+    # 下发回显指令操作结果返回
+    def echo_info_err(self, show_dev, dtq_tcb, msg_arr):
+        show_dev(u"R: 发送回显 : ERR: %d " % (msg_arr[0]))
+
     # 复位端口指令
     def port_reset_err(self, show_dev, dtq_tcb, msg_arr):
-        LOG_TIME = str(datetime.datetime.now())
-        show_dev(u"R: 复位端口 : ERR: %d " % ( msg_arr[0]))
+        show_dev(u"R: 复位端口 : ERR: %d " % (msg_arr[0]))
 
     # 复位端口指令
     def set_rf_ch_err(self, show_dev, dtq_tcb, msg_arr):
-        LOG_TIME = str(datetime.datetime.now())
-        show_dev(u"R: 修改信道 : ERR: %d " % ( msg_arr[0]))
+        show_dev(u"R: 修改信道 : ERR: %d " % (msg_arr[0]))
+
+    # 开始绑定指令
+    def bind_start_err(self, show_dev, dtq_tcb, msg_arr):
+        show_dev(u"R: 开始绑定 : ERR: %d " % (msg_arr[0]))
+
+    # 停止绑定指令
+    def bind_stop_err(self, show_dev, dtq_tcb, msg_arr):
+        show_dev(u"R: 停止绑定 : ERR: %d " % (msg_arr[0]))
+
+    # 清除配置
+    def bind_clear_conf_err(self, show_dev, dtq_tcb, msg_arr):
+        show_dev(u"R: 清除配置 : ERR: %d " % (msg_arr[0]))
 
     # 下发复位端口指令
     def get_reset_port_msg(self, port):
@@ -355,13 +366,13 @@ class dtq_xes_ht46():
         show_msg = "R: [ %10u ] RSSI: -%d, " % (dtq_tcb.devid, msg_arr[rpos:rpos+1][0])
         rpos = rpos + 1  # RSSI
         rpos = rpos + 9  # TIME
-        show_msg += "PRESS:%d, " % self.uid_neg_code(msg_arr[rpos:rpos+4])
+        show_msg += "PRESS:%d, " % self.uid_pos_code(msg_arr[rpos:rpos+4])
         rpos = rpos + 4  # PRESS
-        show_msg += "KEY:%d, " % self.uid_neg_code(msg_arr[rpos:rpos+4])
+        show_msg += "KEY:%d, " % self.uid_pos_code(msg_arr[rpos:rpos+4])
         rpos = rpos + 4  # KEY
-        show_msg += "SEND:%d, " % self.uid_neg_code(msg_arr[rpos:rpos+4])
+        show_msg += "SEND:%d, " % self.uid_pos_code(msg_arr[rpos:rpos+4])
         rpos = rpos + 4  # SEND
-        show_msg += "ECHO:%d, " % self.uid_neg_code(msg_arr[rpos:rpos+4])
+        show_msg += "ECHO:%d, " % self.uid_pos_code(msg_arr[rpos:rpos+4])
         rpos = rpos + 4  # ECHO
         answer_type = msg_arr[rpos:rpos+1][0]
         show_msg += "TYPE:%x, " % answer_type
@@ -402,14 +413,15 @@ class dtq_xes_ht46():
         rpos = 0
         cnt_dict = {}
         uid = self.uid_neg_code(msg_arr[rpos:rpos+4])
+        print msg_arr[rpos:rpos+4]
+        devid = self.uid_pos_code(msg_arr[rpos:rpos+4])
         rpos = rpos + 4
         rep_uid = self.uid_neg_code(msg_arr[rpos:rpos+4])
         # 返回处理结果
         show_msg = u"R: CARD_INFO: UID: [ %010u ] REP_UID:[ %10u ] " % (uid, rep_uid)
         show_dev(show_msg)
-
         cnt_dict["UID"] = uid
-        cur_dtq_tcb = self.get_dtq_tcb(uid)
+        cur_dtq_tcb = self.get_dtq_tcb(devid)
         cur_dtq_tcb.card_cnt = cur_dtq_tcb.card_cnt + 1
         cnt_dict["CARD_ID"] = cur_dtq_tcb.card_cnt
         cnt_dict["CMD"] = "CARD_ID"
@@ -454,10 +466,8 @@ class dtq_xes_ht46():
                     cnt_dict = self.decode_cmds[cur_cmd](show_dev, dtq_tcb, msg_arr[rpos:])
                 else:
                     print "NOP PROCESS!"
-                    # return None
             else:
                 print "UNKONW CMD!"
-                # return None 
             return cnt_dict
 
 if __name__=='__main__':

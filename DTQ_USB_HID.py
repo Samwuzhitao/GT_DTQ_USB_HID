@@ -42,7 +42,7 @@ class dtq_hid_debuger(QWidget):
         self.alive = False
         self.ht46_pro = None # 设备协议
   
-        self.setWindowTitle(u"USB HID调试工具v2.0.1")
+        self.setWindowTitle(u"USB HID调试工具v2.0.2")
         self.com_combo = QComboBox(self)
         self.com_combo.setFixedSize(170, 20)
         self.usb_hid_scan()
@@ -184,10 +184,8 @@ class dtq_hid_debuger(QWidget):
         self.image_timer.timeout.connect(self.usb_dfu_process)
         # 创建并启动 USB 数据解析进程
         self.usb_rbuf_process = QProcessNoStop(self.usb_cmd_decode)
-        self.usb_rbuf_process.start()
         # 按键双击操作的实现
-        self.connect(self.tree_com, SIGNAL("itemDoubleClicked (QTreeWidgetItem *, int)"),
-            self.tree_com_itemDoubleClicked)
+        self.connect(self.tree_com, SIGNAL("itemDoubleClicked (QTreeWidgetItem *, int)"), self.tree_com_itemDoubleClicked)
 
     # 双击获取设备ID
     def tree_com_itemDoubleClicked(self, item, column):
@@ -200,7 +198,7 @@ class dtq_hid_debuger(QWidget):
                 self.mp3_player_dict[cur_dev].start()
             msg_str = u"[ %010u ]:播放测试 :%s！" % (self.ht46_pro.dtqdict[cur_dev].devid, self.ht46_pro.dtqdict[cur_dev].f_name)
             self.s_browser.setText(msg_str)
-    
+
     def q_combo_changed_callback(self):
         q_type = unicode(self.q_combo.currentText())
         q_type_str = q_type.split(":")[0]
@@ -285,6 +283,10 @@ class dtq_hid_debuger(QWidget):
     '''
     def usb_show_hook(self, data):
         self.rev_buf.append(data)
+        # debug_str = ""
+        # for item in data:
+        #    debug_str += " %02X" % (item)
+        # print debug_str
 
     '''
     * Fun Name    : usb_cmd_decode
@@ -326,6 +328,7 @@ class dtq_hid_debuger(QWidget):
         if button_str == u"清空数据":
             self.r_browser.clear()
             self.s_browser.clear()
+            return
 
         if button_str == u"打开USB设备":
             usb_port = str(self.com_combo.currentText())
@@ -334,18 +337,24 @@ class dtq_hid_debuger(QWidget):
                 self.dev_dict[usb_port].set_raw_data_handler(self.usb_show_hook)
                 self.report = self.dev_dict[usb_port].find_output_reports()
                 self.alive = True
-                self.ht46_pro = dtq_xes_ht46()
+                if self.ht46_pro == None:
+                    self.ht46_pro = dtq_xes_ht46()
+                    self.usb_rbuf_process.start()
                 self.s_browser.append(u"打开设备:[ %s ] 成功！" % usb_port )
                 self.open_button.setText(u"关闭USB设备")
+                return
 
         if button_str == u"关闭USB设备":
             usb_port = str(self.com_combo.currentText())
             self.alive = False
             if self.dev_dict[usb_port]:
                 self.dev_dict[usb_port].close()
+                self.usb_rbuf_process.quit()
                 self.report = None
+                self.ht46_pro = None
                 self.s_browser.append(u"关闭设备成功！")
             self.open_button.setText(u"打开USB设备")
+            return
 
         if button_str == u"发送题目":
             q_type =  unicode(self.q_combo.currentText())
@@ -355,22 +364,30 @@ class dtq_hid_debuger(QWidget):
                 msg = self.ht46_pro.get_question_cmd_msg( que_t, cur_msg )
                 self.usb_hid_send_msg( msg )
                 self.s_browser.setText(u"S: 发送题目 : %s : %s " % ( q_type, cur_msg ))
+            return
 
         if button_str == u"发送数据":
             if self.qtree_dict:
+                i = 0
+                msg = unicode(self.cmd_lineedit.text())
+                msg_str = u"S: 发送回显 : %s， UID：" % msg
                 for item in self.uid_list:
-                    cur_msg = unicode(self.cmd_lineedit.text())
-                    msg = self.ht46_pro.get_echo_cmd_msg(item, cur_msg)
-                    self.usb_hid_send_msg(msg)
-                    self.s_browser.setText(u"S: 发送回显 : UID[ %d ] : %s " % (item, cur_msg))
+                    cur_msg = u"[ %d ] %s" % (i, msg)
+                    i = i + 1
+                    s_msg = self.ht46_pro.get_echo_cmd_msg(item, cur_msg)
+                    self.usb_hid_send_msg(s_msg)
+                    msg_str = msg_str + " [ %10u ]" % item
+                self.s_browser.setText(msg_str)
             else:
                 self.s_browser.setText(u"[注意]：白名单为空，请先刷卡！")
+            return
 
         if button_str == u"查看配置":
             if self.alive:
                 msg = self.ht46_pro.get_check_dev_info_msg()
                 self.usb_hid_send_msg(msg)
                 self.s_browser.setText(u"S: 查看设备信息 ")
+            return
 
         if button_str == u"复位端口":
             if self.alive:
@@ -379,6 +396,7 @@ class dtq_hid_debuger(QWidget):
                 msg = self.ht46_pro.get_reset_port_msg(port)
                 self.usb_hid_send_msg(msg)
                 self.s_browser.setText(u"S: 复位端口 ")
+            return
 
         if button_str == u"修改信道":
             if self.alive:
@@ -386,6 +404,30 @@ class dtq_hid_debuger(QWidget):
                 msg = self.ht46_pro.get_set_rf_ch_msg(ch)
                 self.usb_hid_send_msg(msg)
                 self.s_browser.setText(u"S: 修改信道 ")
+            return
+
+        if button_str == u"停止绑定":
+            if self.alive:
+                msg = self.ht46_pro.get_bind_stop_msg()
+                self.usb_hid_send_msg(msg)
+                self.bind_button.setText(u"开始绑定")
+                self.s_browser.setText(u"S: 停止绑定: 绑定结束！此时刷卡无效")
+            return
+
+        if button_str == u"开始绑定":
+            if self.alive:
+                msg = self.ht46_pro.get_bind_start_msg()
+                self.usb_hid_send_msg(msg)
+                self.bind_button.setText(u"停止绑定")
+                self.s_browser.append(u"S: 开始绑定: 绑定开始！请将需要测试的答题器刷卡绑定！")
+            return
+
+        if button_str == u"清除配置":
+            if self.alive:
+                msg = self.ht46_pro.get_clear_dev_info_msg()
+                self.usb_hid_send_msg(msg)
+                self.s_browser.append(u"S: 清除配置: ")
+            return
 
         # if button_str == u"查看白名单":
         #     if self.alive:
@@ -402,28 +444,6 @@ class dtq_hid_debuger(QWidget):
         #     if self.alive:
         #         self.test_button.setText(u"开始回显压测")
         #         self.echo_timer.stop()
-
-        # if button_str == u"开始绑定":
-        #     if self.alive:
-        #         self.send_msg = u"绑定开始！请将需要测试的答题器刷卡绑定！"
-        #         self.usb_hid_send_msg(self.xes_encode.bind_start_msg)
-        #         self.bind_button.setText(u"停止绑定")
-        #         self.r_browser.append(u"S : BIND_START: %s " % ( self.send_msg ))
-
-        # if button_str == u"停止绑定":
-        #     if self.alive:
-        #         self.send_msg = u"绑定结束！此时刷卡无效"
-        #         self.usb_hid_send_msg(self.xes_encode.bind_stop_msg)
-        #         self.bind_button.setText(u"开始绑定")
-        #         self.r_browser.append(u"S : BIND_STOP: %s " % ( self.send_msg ))
-
-
-        # if button_str == u"清除配置":
-        #     if self.alive:
-        #         self.send_msg = u"清除配置信息"
-        #         self.usb_hid_send_msg(self.xes_encode.clear_dev_info_msg)
-        #         self.r_browser.append(u"S : CLEAR_DEV_INFO: %s " % ( self.send_msg ))
-        #         self.usbhidmonitor.cmd_decode.wl_list = []
 
         # if button_str == u"查看白名单":
         #     if self.alive:
