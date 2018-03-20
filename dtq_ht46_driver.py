@@ -46,8 +46,9 @@ class dtq_tcb():
         print u"[ %010u ]:播放测试 :%s！" % (self.devid, self.f_name)
         self.player = mp3play.load(self.f_path)
         self.player.play()
-        time.sleep(self.player.seconds())
-        self.player.stop()
+        # tzime.sleep(self.player.seconds())
+        print u"[ %010u ]:播放测试 :%s！ Time:%d " % (self.devid, self.f_name, self.player.seconds())
+        # self.player.stop()
 
     # 转换文件
     def decode(self):
@@ -109,8 +110,8 @@ class dtq_xes_ht46():
             "RESET_PORT": 0x20}
         self.decode_cmds_name = {
             0x81: "ANSWER_INFO",
-            0x02: "DTQ_ANSWER",
-            0x03: "DTQ_VOICE",
+            0x02: "ANSWER",
+            0x03: "VOICE",
             0x16: "CARD_ID",
             0x84: "ECHO_IFNO",
             0x91: "SET_RFCH",
@@ -377,15 +378,15 @@ class dtq_xes_ht46():
         answer_type = msg_arr[rpos:rpos+1][0]
         show_msg += "TYPE:%x, " % answer_type
         rpos = rpos + 1  # TYPE
-        if answer_type <= 3:
+        if (answer_type < 4) or (answer_type > 5):
             show_msg += "ANSWERS:%x " % (msg_arr[rpos:rpos+1][0])
         else:
             show_msg += "ANSWERS:%s " % (u"{0}".format(msg_arr[rpos:rpos+16]))
         show_dev(show_msg)
         dtq_tcb.answer_cnt = dtq_tcb.answer_cnt + 1
         cnt_dict["UID"] = dtq_tcb.devid
-        cnt_dict["DTQ_ANSWER"] = dtq_tcb.answer_cnt
-        cnt_dict["CMD"] = "DTQ_ANSWER"
+        cnt_dict["ANSWER"] = dtq_tcb.answer_cnt
+        cnt_dict["CMD"] = "ANSWER"
         return cnt_dict
 
     # 上报语音格式解析
@@ -404,8 +405,9 @@ class dtq_xes_ht46():
         dtq_tcb.state_step[dtq_tcb.state](voice_msg, voice_data)
         # 返回处理结果
         cnt_dict["UID"] = dtq_tcb.devid
-        cnt_dict["DTQ_VOICE"] = dtq_tcb.pac_cnt
-        cnt_dict["CMD"] = "DTQ_VOICE"
+        cnt_dict["VOICE_FLG"] = voice_msg["FLG"]
+        cnt_dict["VOICE"] = dtq_tcb.pac_cnt
+        cnt_dict["CMD"] = "VOICE"
         return cnt_dict
 
    # 上报刷卡格式解析
