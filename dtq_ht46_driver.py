@@ -25,7 +25,7 @@ class dtq_tcb():
         self.f_name = None    # MP3 文件名
         self.f_path = None    # MP3 文件存放路径
         self.player = None    # MP3 播放器实例
-        self.state = 0        # 解析数据状态机：状态
+        self.state = 0
         self.state_step = {
             0: self.get_update_f_name,
             1: self.decode_porcess
@@ -43,51 +43,69 @@ class dtq_tcb():
 
     # 播放测试
     def play(self):
-        print u"[ %010u ]:播放测试 :%s！" % (self.devid, self.f_name)
         self.player = mp3play.load(self.f_path)
         self.player.play()
-        # tzime.sleep(self.player.seconds())
-        print u"[ %010u ]:播放测试 :%s！ Time:%d " % (self.devid, self.f_name, self.player.seconds())
-        # self.player.stop()
+        print u"[ %010u ]:播放测试 :%s！" % (self.devid, self.f_name)
 
     # 转换文件
-    def decode(self):
+    def decode(self, show_dev):
         self.f_path = os.path.abspath("./") + '/VOICE/%s' % (self.f_name)
+        msg_str = u"[ %010u ]:数据记录: 发送数据包[%d], 接收数据包[%d]！" % \
+            (self.devid, self.stop_pos+1-self.start_pos, self.pac_cnt)
+        msg_str += u"丢包统计：\r\n"
+        # los_str = ""
+        # pac_str = ""
+        # pac_len = 0
         f = open(self.f_path, 'wb')
         for item in range(self.start_pos, self.stop_pos+1):
             if item in self.voice_dict:
-                f.write(bytearray(self.voice_dict[item]))    
+                hex_data = bytearray(self.voice_dict[item])
+                # debug_str = "E: "
+                # for item in hex_data:
+                #     debug_str += " %02X" % (item)
+                # print debug_str
+                f.write(hex_data)
+                # pac_str += "[ %3d ]" % item
+            else:
+                # pac_str += "[ NOP ]"
+                # los_str += "[ %3d ]" % item
+                msg_str += "[ %3d ]" % item
+            # if (item % 10) == 0:
+            #     msg_str += u"%s | %s\r\n" % (pac_str, los_str)
+            #     pac_len = len(pac_str)
+            #     los_str = ""
+            #     pac_str = ""
         f.close()
-        print u"[ %010u ]:数据记录 :发送数据包[%d], 接收数据包[%d]！" % \
-            (self.devid, self.stop_pos+1-self.start_pos, self.pac_cnt)
-        # self.voice_dict.clear()
+        # if len(pac_str) < pac_len:
+            # pac_str += ' '*(pac_len-len(pac_str))
+        # msg_str += u"%s | %s\r\n" % (pac_str, los_str)
+        show_dev(msg_str)
+        self.voice_dict.clear()
+        self.state = 0
 
     # 打印提示信息
-    def get_update_f_name(self, voice_info, vocie_msg):
-        voice_time = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
-        self.f_name = "VOICE_%010u_%s.mp3" % (self.devid, voice_time)
-        print u"[ %010u ]:录音开始 :%s！" % (self.devid, self.f_name)
-        # 记录初始数据
-        print voice_info
-        self.pac_cnt = 1
-        if voice_info["FLG"] == 0:
+    def get_update_f_name(self, show_dev, voice_info, vocie_msg):
+        if voice_info["FLG"] == 0 and voice_info["POS"] == 1:
+            voice_time = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
+            self.f_name = "VOICE_%010u_%s.mp3" % (self.devid, voice_time)
+            msg_str = u"[ %010u ]:录音开始 :%s！" % (self.devid, self.f_name)
+            show_dev(msg_str)
+            # 记录初始数据
+            # print voice_info
+            self.pac_cnt = 1
             self.start_pos = voice_info["POS"]
             self.voice_dict[voice_info["POS"]] = vocie_msg
-            # 切换状态
             self.state = 1
 
-    def decode_porcess(self, voice_info, vocie_msg):
-        # 语音数据分析
-        self.pac_cnt = self.pac_cnt + 1
-        if voice_info["FLG"] == 0:
-            self.voice_dict[voice_info["POS"]] = vocie_msg
+    # 语音数据分析
+    def decode_porcess(self, show_dev, voice_info, vocie_msg):
+        if voice_info["POS"] not in self.voice_dict:
+            self.pac_cnt = self.pac_cnt + 1
+        self.voice_dict[voice_info["POS"]] = vocie_msg
         if voice_info["FLG"] == 1:
-            self.voice_dict[voice_info["POS"]] = vocie_msg
             self.stop_pos = voice_info["POS"]
             # 解码
-            self.decode()
-            # 切换状态
-            self.state = 0
+            self.decode(show_dev)
 
 class dtq_xes_ht46():
     def __init__(self):
@@ -364,24 +382,26 @@ class dtq_xes_ht46():
     def answer_info_decode(self, show_dev, dtq_tcb, msg_arr):
         rpos = 0
         cnt_dict = {}
-        show_msg = "R: [ %10u ] RSSI: -%d, " % (dtq_tcb.devid, msg_arr[rpos:rpos+1][0])
+        show_msg = "R: [ %10u ] RSSI: -%d, " % (dtq_tcb.devid, msg_arr[rpos: rpos+1][0])
         rpos = rpos + 1  # RSSI
         rpos = rpos + 9  # TIME
-        show_msg += "PRESS:%d, " % self.uid_pos_code(msg_arr[rpos:rpos+4])
+        show_msg += "POWER:%d, " %  msg_arr[rpos: rpos+1][0]
+        rpos = rpos + 4  # POWER
+        show_msg += "PRESS:%d, " % self.uid_pos_code(msg_arr[rpos: rpos+4])
         rpos = rpos + 4  # PRESS
-        show_msg += "KEY:%d, " % self.uid_pos_code(msg_arr[rpos:rpos+4])
+        show_msg += "KEY:%d, " % self.uid_pos_code(msg_arr[rpos: rpos+4])
         rpos = rpos + 4  # KEY
-        show_msg += "SEND:%d, " % self.uid_pos_code(msg_arr[rpos:rpos+4])
+        show_msg += "SEND:%d, " % self.uid_pos_code(msg_arr[rpos: rpos+4])
         rpos = rpos + 4  # SEND
-        show_msg += "ECHO:%d, " % self.uid_pos_code(msg_arr[rpos:rpos+4])
+        show_msg += "ECHO:%d, " % self.uid_pos_code(msg_arr[rpos: rpos+4])
         rpos = rpos + 4  # ECHO
-        answer_type = msg_arr[rpos:rpos+1][0]
+        answer_type = msg_arr[rpos: rpos+1][0]
         show_msg += "TYPE:%x, " % answer_type
         rpos = rpos + 1  # TYPE
         if (answer_type < 4) or (answer_type > 5):
-            show_msg += "ANSWERS:%x " % (msg_arr[rpos:rpos+1][0])
+            show_msg += "ANSWERS:%x " % (msg_arr[rpos: rpos+1][0])
         else:
-            show_msg += "ANSWERS:%s " % (u"{0}".format(msg_arr[rpos:rpos+16]))
+            show_msg += "ANSWERS:%s " % (u"{0}".format(msg_arr[rpos: rpos+16]))
         show_dev(show_msg)
         dtq_tcb.answer_cnt = dtq_tcb.answer_cnt + 1
         cnt_dict["UID"] = dtq_tcb.devid
@@ -395,14 +415,21 @@ class dtq_xes_ht46():
         cnt_dict = {}
         rpos = 0
         voice_msg["RSSI"] = voice_arr[rpos:rpos+1][0]
-        rpos = rpos + 1   # RSSI
+        rpos = rpos + 1     # RSSI
         voice_msg["FLG"] = voice_arr[rpos:rpos+1][0]
-        rpos = rpos + 1   # FLG
+        rpos = rpos + 1     # FLG
         pac_num = voice_arr[rpos:rpos+2]
         voice_msg["POS"] = (pac_num[0] << 8 | pac_num[1])
-        rpos = rpos + 2   # PAC_NUM
+        # print "POS = %d " % voice_msg["POS"]
+        rpos = rpos + 2     # PAC_NUM
         voice_data = voice_arr[rpos:rpos+208]
-        dtq_tcb.state_step[dtq_tcb.state](voice_msg, voice_data)
+        # debug_str = "R: "
+        # for item in voice_data:
+        #    debug_str += " %02X" % (item)
+        # print debug_str
+        rpos = rpos + 208   # PAC_VOICE
+        # print voice_arr[rpos:]
+        dtq_tcb.state_step[dtq_tcb.state](show_dev, voice_msg, voice_data)
         # 返回处理结果
         cnt_dict["UID"] = dtq_tcb.devid
         cnt_dict["VOICE_FLG"] = voice_msg["FLG"]

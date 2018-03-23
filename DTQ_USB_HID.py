@@ -43,7 +43,7 @@ class dtq_hid_debuger(QWidget):
         # 设备协议
         self.dev_pro = None
 
-        self.setWindowTitle(u"USB HID调试工具v2.0.2")
+        self.setWindowTitle(u"USB HID调试工具v2.0.3")
         self.com_combo = QComboBox(self)
         self.com_combo.setFixedSize(170, 20)
         self.usb_hid_scan()
