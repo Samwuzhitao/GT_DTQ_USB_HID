@@ -47,38 +47,77 @@ class dtq_tcb():
         self.player.play()
         print u"[ %010u ]:播放测试 :%s！" % (self.devid, self.f_name)
 
+    # 数据校验
+    def check(self,show_dev):
+        # 校验
+        max_size = 0
+        f = open(self.f_path, 'rb')
+        rd_pos = 0
+        pac_err = ""
+        pac_ok_str = ""
+        for item in range(self.start_pos, self.stop_pos+1):
+            if item in self.voice_dict:
+                f.seek(rd_pos,0)
+                pac_len = len(self.voice_dict[item])
+                rd_data = f.read(pac_len)
+                # 读回数据输出
+                rd_str = u"RD: 偏移:%d 数据: " % rd_pos
+                for rd_item in rd_data:
+                    rd_str += " %02X" % (ord(rd_item))
+                # 写入数据输出
+                wr_str = u"WR: 偏移:%d 数据: " % rd_pos
+                for wr_item in self.voice_dict[item]:
+                    wr_str += " %02X" % (wr_item)
+                rd_pos = rd_pos + pac_len
+                print rd_str
+                print wr_str
+                err = 0
+                for pos in range(0, pac_len):
+                    if ord(rd_data[pos]) != self.voice_dict[item][pos]:
+                        print "write err! rd:%x wr:%x" % (ord(rd_data[pos]), 
+                            self.voice_dict[item][pos])
+                        err = 1
+                if err:
+                    print "COMPARE ERR: PACK[%d] %d " % (item,err)
+                    pac_err += "[ %3d ]" % item
+                else:
+                    pac_ok_str += "[ %3d ]" % item
+        f.close()
+        check_str = u"\t检验出错数据包: %s \r\n" % (pac_err)
+        info_str = u"\t理论文件大小:%d 实际文件大小:%d 检验总长度:%d \r\n" % \
+            (max_size,int(os.path.getsize(self.f_path)),cnt_size)
+        msg_str = info_str + check_str
+        show_dev(msg_str)
+
+    # MP3 格式检测
+    def mp3_format_check(self, voice_data):
+        if voice_data[0] == 0xFF and voice_data[1] == 0xFB:
+            return True
+        else:
+            return False
+
     # 转换文件
     def decode(self, show_dev):
         self.f_path = os.path.abspath("./") + '/VOICE/%s' % (self.f_name)
-        msg_str = u"[ %010u ]:数据记录: 发送数据包[%d], 接收数据包[%d]！" % \
-            (self.devid, self.stop_pos+1-self.start_pos, self.pac_cnt)
-        msg_str += u"丢包统计：\r\n"
-        # los_str = ""
-        # pac_str = ""
-        # pac_len = 0
+        cnt_size = 0
+        msg_str = ""
+        format_err = ""
         f = open(self.f_path, 'wb')
         for item in range(self.start_pos, self.stop_pos+1):
             if item in self.voice_dict:
-                hex_data = bytearray(self.voice_dict[item])
-                # debug_str = "E: "
-                # for item in hex_data:
-                #     debug_str += " %02X" % (item)
-                # print debug_str
-                f.write(hex_data)
-                # pac_str += "[ %3d ]" % item
+                wr_data = bytearray(self.voice_dict[item])
+                f.write(wr_data)
+                cnt_size += len(wr_data)
+                if self.mp3_format_check(self.voice_dict[item]) == False:
+                    format_err += "[ %3d ]" % item
             else:
-                # pac_str += "[ NOP ]"
-                # los_str += "[ %3d ]" % item
                 msg_str += "[ %3d ]" % item
-            # if (item % 10) == 0:
-            #     msg_str += u"%s | %s\r\n" % (pac_str, los_str)
-            #     pac_len = len(pac_str)
-            #     los_str = ""
-            #     pac_str = ""
         f.close()
-        # if len(pac_str) < pac_len:
-            # pac_str += ' '*(pac_len-len(pac_str))
-        # msg_str += u"%s | %s\r\n" % (pac_str, los_str)
+        msg_str = u"[ %010u ]:数据记录 文件大小: [ %d ], 发送数据包: [ %d ], 接收数据包: [ %d ]！\r\n" % \
+            (self.devid, cnt_size, self.stop_pos+1-self.start_pos, self.pac_cnt)
+        msg_str += u"丢包统计：\r\n"
+        msg_str += u"错帧统计：\r\n"
+        msg_str += format_err
         show_dev(msg_str)
         self.voice_dict.clear()
         self.state = 0
@@ -99,6 +138,8 @@ class dtq_tcb():
 
     # 语音数据分析
     def decode_porcess(self, show_dev, voice_info, vocie_msg):
+        # print "PAC[%3d] HEADER:%02X %02X %02X %02X %02X" % (voice_info["POS"],
+        #     vocie_msg[0], vocie_msg[1], vocie_msg[2], vocie_msg[3], vocie_msg[4])
         if voice_info["POS"] not in self.voice_dict:
             self.pac_cnt = self.pac_cnt + 1
         self.voice_dict[voice_info["POS"]] = vocie_msg
@@ -119,25 +160,29 @@ class dtq_xes_ht46():
         self.encode_cmds_name = { 
             "ANSWER_INFO": 0x01,
             "ANSWER_ECHO": 0x04,
+            "CTL_INFO": 0x05,
             "SET_RFCH": 0x11,
             "GET_DEVINFO": 0x13,
             "CLEAR_SET": 0x14,
             "BIND_START": 0x15,
             "BIND_INFO": 0x16,
             "BIND_STOP": 0x17,
-            "RESET_PORT": 0x20}
+            "RESET_PORT": 0x20,
+            "CHECK_WL": 0x21}
         self.decode_cmds_name = {
             0x81: "ANSWER_INFO",
             0x02: "ANSWER",
             0x03: "VOICE",
             0x16: "CARD_ID",
             0x84: "ECHO_IFNO",
+            0x85: "CTL_INFO",
             0x91: "SET_RFCH",
             0x93: "DEVICE_INFO",
             0x94: "CLEAR_SET",
             0x95: "BIND_START",
             0x97: "BIND_STOP",
-            0xA8: "RESET_PORT"
+            0xA8: "RESET_PORT",
+            0xA1: "CHECK_WL"
         }
         self.decode_cmds = {
             0x81: self.answer_info_err,
@@ -145,12 +190,14 @@ class dtq_xes_ht46():
             0x03: self.answer_voice_update,
             0x16: self.card_id_update,
             0x84: self.echo_info_err,
+            0x85: self.ctl_info_err,
             0x91: self.set_rf_ch_err,
             0x93: self.dev_info_msg_update,
             0x94: self.bind_clear_conf_err,
             0xA8: self.port_reset_err,
             0x95: self.bind_start_err,
             0x97: self.bind_stop_err,
+            0xA1: self.dev_wl_msg_update
         }
 
     '''
@@ -290,6 +337,28 @@ class dtq_xes_ht46():
             que_msg.append(item)
         return que_msg
 
+    # 下发答题器控制指令
+    def get_dtq_ctl_msg(self, devid, led_s, beep_s, motor_s):
+        ctl_msg = []
+        dtq_tcb = self.get_dtq_tcb(devid)
+        # 填充设备ID
+        uid_arr = self.get_uid_arr_pos(dtq_tcb.devid)
+        for item in uid_arr:
+            ctl_msg.append(item)
+        # 填充包序号
+        dtq_tcb.seq_add()
+        seq_arr = self.get_seq_hex_arr(dtq_tcb.send_seq)
+        for item in seq_arr:
+            ctl_msg.append(item)
+        # 设置包指令
+        ctl_msg.append(self.encode_cmds_name["CTL_INFO"])
+        # 添加包内容
+        ctl_msg.append(3)
+        ctl_msg.append(led_s)
+        ctl_msg.append(beep_s)
+        ctl_msg.append(motor_s)
+        return ctl_msg
+
     # 下发设置信道
     def get_set_rf_ch_msg(self, rf_ch):
         cof_msg = [0x00, 0x00, 0x00, 0x00]
@@ -336,6 +405,10 @@ class dtq_xes_ht46():
     def get_bind_stop_msg(self):
         return self.get_jsq_cmd_init("BIND_STOP")
 
+    # 下发查看白名单
+    def get_check_wl_msg(self):
+        return self.get_jsq_cmd_init("CHECK_WL")
+
     # 下发题目指令操作结果返回
     def answer_info_err(self, show_dev, dtq_tcb, msg_arr):
         show_dev(u"R: 发送题目 : ERR: %d " % (msg_arr[0]))
@@ -343,6 +416,10 @@ class dtq_xes_ht46():
     # 下发回显指令操作结果返回
     def echo_info_err(self, show_dev, dtq_tcb, msg_arr):
         show_dev(u"R: 发送回显 : ERR: %d " % (msg_arr[0]))
+
+    # 发送控制参数操作结果返回
+    def ctl_info_err(self, show_dev, dtq_tcb, msg_arr):
+        show_dev(u"R: 答题器控制 : ERR: %d " % (msg_arr[0]))
 
     # 复位端口指令
     def port_reset_err(self, show_dev, dtq_tcb, msg_arr):
@@ -472,6 +549,21 @@ class dtq_xes_ht46():
             (dev_id, sf_version, rf_ch, tx_power)
         show_dev(show_msg)
 
+    def dev_wl_msg_update(self, show_dev, dtq_tcb, msg_arr):
+        show_msg = u"R: 查看白名单 : "
+        wl_len = int(len(msg_arr) / 5)
+        show_msg += u"WL_LEN:%d \r\n" % (wl_len)
+        rpos = 0
+        for upos in range(0, wl_len):
+            pos = msg_arr[rpos]
+            uid_arr = msg_arr[rpos+1: rpos+5]
+            show_msg += u"PORT[ %d ] UPOS[%2d ] UID:[ %010u ],  " % \
+                ((pos&0xF0)>>4, (pos&0x0F), self.uid_neg_code(uid_arr))
+            if((upos+1) % 3 == 0):
+                show_msg += "\r\n"
+            rpos = rpos + 5
+        show_dev(show_msg)
+
     '''
         协议上报指令解析函数
     '''
@@ -492,7 +584,7 @@ class dtq_xes_ht46():
                 pac_info["LEN"] = msg_arr[rpos:rpos+1][0]
                 rpos = rpos + 1
                 if cur_cmd in self.decode_cmds:
-                    cnt_dict = self.decode_cmds[cur_cmd](show_dev, dtq_tcb, msg_arr[rpos:])
+                    cnt_dict = self.decode_cmds[cur_cmd](show_dev, dtq_tcb, msg_arr[rpos: rpos+pac_info["LEN"]])
                 else:
                     print "NOP PROCESS!"
             else:

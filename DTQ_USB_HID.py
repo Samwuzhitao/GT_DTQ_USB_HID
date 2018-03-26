@@ -43,7 +43,7 @@ class dtq_hid_debuger(QWidget):
         # 设备协议
         self.dev_pro = None
 
-        self.setWindowTitle(u"USB HID调试工具v2.0.3")
+        self.setWindowTitle(u"USB HID调试工具v2.0.4")
         self.com_combo = QComboBox(self)
         self.com_combo.setFixedSize(170, 20)
         self.usb_hid_scan()
@@ -83,6 +83,31 @@ class dtq_hid_debuger(QWidget):
         c_hbox.addWidget(self.check_wl_button)
         c_hbox.addWidget(self.port_combo)
         c_hbox.addWidget(self.port_button)
+
+        s_hbox = QHBoxLayout()
+        self.ctl_label = QLabel(u"状态控制：")
+        self.devid_label = QLabel(u"答题器ID：")
+        self.devid_lineedit = QLineEdit()
+        self.led_label = QLabel(u"指示灯：")
+        self.led_combo = QComboBox(self)
+        self.led_combo.addItems([u"NOP:0x00", u"闪一下:0x01"])
+        self.beep_label = QLabel(u"蜂鸣器：")
+        self.beep_combo = QComboBox(self)
+        self.beep_combo.addItems([u"NOP:0x00", u"叫一下:0x01"])
+        self.motor_label = QLabel(u"电机：")
+        self.motor_combo = QComboBox(self)
+        self.motor_combo.addItems([u"NOP:0x00", u"震一下:0x01"])
+        self.ctl_button = QPushButton(u"同步状态")
+        s_hbox.addWidget(self.ctl_label)
+        s_hbox.addWidget(self.devid_label)
+        s_hbox.addWidget(self.devid_lineedit)
+        s_hbox.addWidget(self.led_label)
+        s_hbox.addWidget(self.led_combo)
+        s_hbox.addWidget(self.beep_label)
+        s_hbox.addWidget(self.beep_combo)
+        s_hbox.addWidget(self.motor_label)
+        s_hbox.addWidget(self.motor_combo)
+        s_hbox.addWidget(self.ctl_button)
 
         f_hbox = QHBoxLayout()
         self.fm_label=QLabel(u"固件路径：")
@@ -157,6 +182,7 @@ class dtq_hid_debuger(QWidget):
         box.addLayout(c_hbox)
         box.addLayout(q_hbox)
         box.addLayout(t_hbox)
+        box.addLayout(s_hbox)
         box.addLayout(f_hbox)
         box.addWidget(self.s_browser)
         box.addWidget(self.r_browser)
@@ -179,6 +205,7 @@ class dtq_hid_debuger(QWidget):
         self.pp_test_button.clicked.connect(self.btn_event_callback)
         self.fm_add_button.clicked.connect(self.btn_event_callback)
         self.fm_update_button.clicked.connect(self.btn_event_callback)
+        self.ctl_button.clicked.connect(self.btn_event_callback)
         self.q_combo.currentIndexChanged.connect(self.q_combo_changed_callback)
         # 下载数据处理进程
         self.image_timer = QTimer()
@@ -188,10 +215,16 @@ class dtq_hid_debuger(QWidget):
         self.usb_sbuf_process = QProcessNoStop(self.usb_cmd_snd_process)
         # 按键双击操作的实现
         self.connect(self.tree_com, SIGNAL("itemDoubleClicked (QTreeWidgetItem *, int)"), self.tree_com_itemDoubleClicked)
+        self.connect(self.tree_com, SIGNAL("itemClicked (QTreeWidgetItem *, int)"), self.tree_com_itemClicked)
+
+    # 单击获取设备ID
+    def tree_com_itemClicked(self, item, column):
+        self.devid_lineedit.setText(unicode(item.text(1)))
 
     # 双击获取设备ID
     def tree_com_itemDoubleClicked(self, item, column):
         cur_dev = int(unicode(item.text(1)))
+        self.devid_lineedit.setText(unicode(item.text(1)))
         if cur_dev in self.dev_pro.dtqdict:
             if cur_dev in self.mp3_player_dict:
                 self.mp3_player_dict[cur_dev].start()
@@ -450,12 +483,26 @@ class dtq_hid_debuger(QWidget):
                 self.usb_snd_to_buf(msg)
                 self.s_browser.append(u"S: 清除配置: ")
             return
+        
+        if button_str == u"同步状态":
+            if self.alive:
+                devid = int(str(self.devid_lineedit.text()))
+                led_ctl_type = unicode(self.led_combo.currentText())
+                leds = int(led_ctl_type.split(":")[1][2:]) 
+                beep_ctl_type = unicode(self.beep_combo.currentText())
+                beeps = int(beep_ctl_type.split(":")[1][2:])
+                motor_ctl_type = unicode(self.motor_combo.currentText())
+                motors = int(motor_ctl_type.split(":")[1][2:])
+                print (devid, leds, beeps, motors)
+                msg = self.dev_pro.get_dtq_ctl_msg(devid, leds, beeps, motors)
+                self.usb_snd_to_buf(msg)
+                self.s_browser.append(u"S: 同步状态: UID：[ %10u ]" % devid)
 
-        # if button_str == u"查看白名单":
-        #     if self.alive:
-        #         self.send_msg = u"查看白名单"
-        #         self.usb_snd_to_buf(self.xes_encode.check_wl)
-        #         self.r_browser.append(u"S : CHECK_WL: %s " % ( self.send_msg ))
+        if button_str == u"查看白名单":
+            if self.alive:
+                msg = self.dev_pro.get_check_wl_msg()
+                self.usb_snd_to_buf(msg)
+                self.s_browser.append(u"S: 查看白名单: %s ")
 
         # if button_str == u"开始回显压测":
         #     if self.alive:
