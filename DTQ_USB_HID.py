@@ -11,6 +11,7 @@ import pywinusb.hid as hid
 from  serial.tools import list_ports
 from dtq_ht46_driver import *
 from qprocess import *
+from file_transfer import *
 
 # 配置日志输出的方式及格式
 LOG_TIME = time.strftime('%Y%m%d%H', time.localtime(time.time()))
@@ -40,10 +41,12 @@ class dtq_hid_debuger(QWidget):
         # USB 设备管理
         self.dev_dict = {}
         self.alive = False
-        # 设备协议
+        # 答题协议
         self.dev_pro = None
+        # 升级协议
+        self.dfu_pro = None
 
-        self.setWindowTitle(u"USB HID调试工具v2.0.4")
+        self.setWindowTitle(u"USB HID调试工具v2.0.5")
         self.com_combo = QComboBox(self)
         self.com_combo.setFixedSize(170, 20)
         self.usb_hid_scan()
@@ -57,7 +60,7 @@ class dtq_hid_debuger(QWidget):
         self.check_wl_button = QPushButton(u"查看白名单")
         self.port_combo = QComboBox(self)
         self.port_combo.addItems([u"PORT0:0x00", u"PORT1:0x01",
-            u"PORT2:0x02", u"PORT3:0x03", u"PORT4:0x04", u"PORT5:0x05"])
+            u"PORT2:0x02", u"PORT3:0x03", u"PORT4:0x04"])
         self.port_button = QPushButton(u"复位端口")
 
         e_hbox = QHBoxLayout()
@@ -242,49 +245,73 @@ class dtq_hid_debuger(QWidget):
     def usb_dfu_process(self):
         if self.alive:
             print "CHECK"
-            # # 发送镜像信息
-            # if self.usbhidmonitor.cmd_decode.usb_dfu_state == 0:
-            #     self.r_browser.append(u"S : 开始连接设备...")
-            #     if self.usbhidmonitor.cmd_decode.iamge_cmd_cnt == 0:
-            #         image_info_pac = self.xes_encode.usb_dfu_soh_pac()
-            #         if image_info_pac :
-            #             self.usb_snd_to_buf( image_info_pac )
-            # # # 发送镜像数据
-            # if self.usbhidmonitor.cmd_decode.usb_dfu_state == 1:
-            #     self.r_browser.append(u"S : 建立连接成功...")
-            #     self.image_timer.stop()
+            # 发送镜像信息
+            if self.dev_pro.dfu_s == 0:
+                self.s_browser.append(u"S: 开始连接设备...")
+                if self.dfu_pro.f_offset == 0:
+                    image_info = self.dfu_pro.usb_dfu_soh_pac()
+                    if image_info:
+                        msg = self.dev_pro.get_dfu_msg(0x30, image_info)
+                        self.usb_snd_to_buf(msg)
+                        return
+            # 切换定时器
+            if self.dev_pro.dfu_s == 1:
+                self.image_timer.stop()
+                self.image_timer.start(20)
+                self.dev_pro.dfu_s = 2
+
+            # 切换定时器
+            if self.dev_pro.dfu_s == 2:
+                image_data = self.dfu_pro.usb_dfu_stx_pac()
+                if image_data:
+                    msg = self.dev_pro.get_dfu_msg(0x31, image_data)
+                    if msg != None:
+                        self.usb_snd_to_buf(msg)
+                        self.progressDialog_value = (self.dfu_pro.f_offset * 100) / self.dfu_pro.f_size
+                        self.progressDialog.setValue(self.progressDialog_value)
+                else:
+                    self.dev_pro.dfu_s = 3
+                return
+            # 发送镜像数据
+            if self.dev_pro.dfu_s == 3:
+                self.s_browser.append(u"S: 数据传输完成...")
+                self.alive    = False
+                self.dev_dict = {}
+                self.image_timer.stop()
+                self.image_timer.start(300)
+                return
         else:
             print "SCAN"
             self.usb_hid_scan()
             for item in self.dev_dict:
                 base_name = item.split(".")[0]
-                # print base_name[:-1],self.usbhidmonitor.cmd_decode.usb_dfu_state
-
-                # if self.usbhidmonitor.cmd_decode.usb_dfu_state == 0:
-                #     if base_name[:-1]== "JSQ_BOOT":
-                #         self.dev_dict[item].open()
-                #         self.dev_dict[item].set_raw_data_handler(self.usb_rev_to_buf)
-                #         self.report = self.dev_dict[item].find_output_reports()
-                #         self.alive  = True
-                #         self.usbhidmonitor = UsbHidMontior()
-                #         self.connect(self.usbhidmonitor,SIGNAL('usb_r_msg()'),self.usb_cmd_rev_process)
-                #         self.usbhidmonitor.start()
-                #         self.r_browser.append(u"打开设备:[ %s ] 成功！" % item )
-                #         self.open_button.setText(u"关闭USB设备")
-
-                # if self.usbhidmonitor.cmd_decode.usb_dfu_state == 2:
-                #     if base_name[:-1]== "DTQ_JSQ_":
-                #         self.dev_dict[item].open()
-                #         self.dev_dict[item].set_raw_data_handler(self.usb_rev_to_buf)
-                #         self.report = self.dev_dict[item].find_output_reports()
-                #         self.alive  = True
-                #         self.usbhidmonitor = UsbHidMontior()
-                #         self.connect(self.usbhidmonitor,SIGNAL('usb_r_msg()'),self.usb_cmd_rev_process)
-                #         self.usbhidmonitor.start()
-                #         self.r_browser.append(u"打开设备:[ %s ] 成功！" % item )
-                #         self.open_button.setText(u"关闭USB设备")
-                #         self.usbhidmonitor.cmd_decode.usb_dfu_state = 0
-                #         self.image_timer.stop()
+                print base_name[:-1]
+                # 扫描 BOOT 设备
+                if self.dev_pro.dfu_s == 0:
+                    if base_name[:-1]== "JSQ_BOOT":
+                        self.dev_dict[item].open()
+                        self.dev_dict[item].set_raw_data_handler(self.usb_rev_to_buf)
+                        self.report = self.dev_dict[item].find_output_reports()
+                        self.alive  = True
+                        self.dev_pro = dtq_xes_ht46()
+                        self.usb_rbuf_process.start()
+                        self.usb_sbuf_process.start()
+                        self.s_browser.append(u"打开设备:[ %s ] 成功！" % item )
+                        self.open_button.setText(u"关闭USB设备")
+                # 扫描 JSQ 设备
+                if self.dev_pro.dfu_s == 3:
+                    if base_name[:-1]== "DTQ_JSQ_":
+                        self.dev_dict[item].open()
+                        self.dev_dict[item].set_raw_data_handler(self.usb_rev_to_buf)
+                        self.report = self.dev_dict[item].find_output_reports()
+                        self.alive  = True
+                        self.dev_pro = dtq_xes_ht46()
+                        self.usb_rbuf_process.start()
+                        self.usb_sbuf_process.start()
+                        self.s_browser.append(u"打开设备:[ %s ] 成功！" % item )
+                        self.open_button.setText(u"关闭USB设备")
+                        self.dev_pro.dfu_s = 0
+                        self.image_timer.stop()
 
     '''
     * Fun Name    : usb_snd_to_buf
@@ -347,6 +374,7 @@ class dtq_hid_debuger(QWidget):
             tmp_msg = self.rev_buf.pop()
             # 此处指令解析放在协议文件的内部实现，方便实现硬件的兼容
             res_dict = self.dev_pro.answer_cmd_decode(self.r_browser.append, tmp_msg)
+            # self.r_browser.moveCursor(QTextCursor.End)
             logging.debug(u"接收数据：R : {0}".format(res_dict))
             # 获取指令中的ID
             if res_dict:
@@ -415,6 +443,8 @@ class dtq_hid_debuger(QWidget):
             q_type =  unicode(self.q_combo.currentText())
             if self.alive:
                 que_t = int(q_type.split(":")[1][2:])
+                que_t = (que_t / 10)*16 +  que_t % 10
+                print que_t
                 cur_msg   = unicode(self.q_lineedit.text())
                 msg = self.dev_pro.get_question_cmd_msg( que_t, cur_msg )
                 self.usb_snd_to_buf( msg )
@@ -502,7 +532,27 @@ class dtq_hid_debuger(QWidget):
             if self.alive:
                 msg = self.dev_pro.get_check_wl_msg()
                 self.usb_snd_to_buf(msg)
-                self.s_browser.append(u"S: 查看白名单: %s ")
+                self.s_browser.append(u"S: 查看白名单:")
+        
+        if button_str == u"添加固件":
+            image_path = unicode(QFileDialog.getOpenFileName(self, 'Open file', './', "bin files(*.bin)"))
+            if len(image_path) > 0:
+                self.fm_lineedit.setText(image_path)
+
+        if button_str == u"升级程序":
+            image_path = unicode(self.fm_lineedit.text())
+            if len(image_path) > 0:
+                print image_path
+                self.dev_pro.dfu_s = 0
+                self.dfu_pro = file_transfer(image_path, self.dev_pro.PAC_LEN - 21)
+                self.image_timer.start(300)
+                self.progressDialog=QProgressDialog(self)
+                self.progressDialog.setWindowModality(Qt.WindowModal)
+                self.progressDialog.setMinimumDuration(5)
+                self.progressDialog.setWindowTitle(u"请等待")
+                self.progressDialog.setLabelText(u"下载中...")
+                self.progressDialog.setCancelButtonText(u"取消")
+                self.progressDialog.setRange(0,100)
 
         # if button_str == u"开始回显压测":
         #     if self.alive:
@@ -513,12 +563,6 @@ class dtq_hid_debuger(QWidget):
         #     if self.alive:
         #         self.test_button.setText(u"开始回显压测")
         #         self.echo_timer.stop()
-
-        # if button_str == u"查看白名单":
-        #     if self.alive:
-        #         self.send_msg = u"查看白名单"
-        #         self.usb_snd_to_buf(self.xes_encode.check_wl)
-        #         self.r_browser.append(u"S : CHECK_WL: %s " % ( self.send_msg ))
 
         # if button_str == u"开始单选乒乓":
         #     if self.alive:
@@ -531,101 +575,6 @@ class dtq_hid_debuger(QWidget):
         #     if self.alive:
         #         self.pp_test_flg = False
         #         self.pp_test_button.setText(u"开始单选乒乓")
-
-        # if button_str == u"添加固件":
-        #     temp_image_path = unicode(QFileDialog.getOpenFileName(self, 'Open file', './', "bin files(*.bin)"))
-        #     if len(temp_image_path) > 0:
-        #         self.fm_lineedit.setText(temp_image_path)
-
-        # if button_str == u"生成头文件":
-        #     image_path = unicode(self.fm_lineedit.text())
-        #     if len(image_path) > 0:
-        #         file_name = os.path.basename(image_path)
-        #         file_size = int(os.path.getsize(image_path))
-        #         file_offset = 0
-        #         print "File Name: %s " % file_name
-        #         print "File Size: %d " % file_size
-        #         new_file_name = file_name.split('_')[1]+'.h'
-        #         print new_file_name
-        #         dst_f = open(new_file_name, "w")
-
-        #         dst_f.write('/*******************************************************************************\n')
-        #         dst_f.write('* File Name          : %s\n' % (file_name.split('.')[0]+'.h'))
-        #         dst_f.write('* Author             : Sam.wu\n')
-        #         dst_f.write('* Version            : V1.0.0\n')
-        #         dst_f.write('* Date               : %s\n' % time.strftime( LOGTIMEFORMAT,time.localtime(time.time())))
-        #         dst_f.write('********************************************************************************/\n\r\n')
-        #         dst_f.write('#ifndef __%s_IMAGE__\n' % file_name.split('_')[1])
-        #         dst_f.write('#define __%s_IMAGE__\n' % file_name.split('_')[1])
-        #         dst_f.write('#include "stm32f10x.h"\n\r\n')
-        #         dst_f.write('const uint8_t %s_image[] =\n' % file_name.split('_')[1])
-        #         dst_f.write('{\n')
-        #         while file_offset < file_size:
-        #             src_f = open(image_path, "rb")
-        #             src_f.seek(file_offset,0)
-        #             if (file_offset + 16) < file_size:
-        #                 r_len = 16
-        #             else:
-        #                 r_len = file_size-file_offset
-        #             image_data = src_f.read( r_len )
-        #             image_data_arry = ""
-        #             for item in image_data:
-        #                 image_data_arry = image_data_arry + " 0x%02X," % (ord(item))
-        #             image_data_arry = image_data_arry + '\n'
-        #             print image_data_arry
-        #             dst_f.write(image_data_arry)
-        #             file_offset = file_offset + r_len
-        #             src_f.close()
-        #         dst_f.write('}\n\r\n')
-        #         dst_f.write('#endif\r\n')
-        #         dst_f.close()
-
-        # if button_str == u"转化HEX文件":
-        #     image_path = unicode(self.fm_lineedit.text())
-        #     if len(image_path) > 0 :
-        #         f = open(image_path)
-        #         li = f.readlines()
-        #         f.close()
-
-        #         time_data = time.strftime( '%Y%m%d',time.localtime(time.time()))
-        #         uid_str   = "%08X" % (string.atoi(str(self.dtq_id_lineedit.text()),10))
-        #         insert_data = "08FC0000" + time_data + uid_str
-        #         insert_data_hex = insert_data.decode("hex")
-
-        #         check_sum = 0
-        #         for i in insert_data_hex:
-        #             check_sum = (ord(i) + check_sum) % 0x100
-
-        #         insert_data = ':' + insert_data + "%02X\n" % (0x100-check_sum)
-        #         li.insert(1, insert_data)
-        #         #print li
-        #         file_path = self.dtq_image_path[0:len(self.dtq_image_path)-4]
-        #         self.new_image_path = file_path + "_NEW.hex"
-
-        #         new_file = open(self.new_image_path ,'w')
-        #         for i in li:
-        #             new_file.write(i)
-        #         new_file.close()
-
-        #         self.r_browser.append(u"<font color=black>DTQ@UID:[%s] HEX文件转换成功</font>" %
-        #             str(self.dtq_id_lineedit.text()) )
-        #     else:
-        #         self.r_browser.append(u"<font color=black>DTQ@错误:</font><font color=red>无烧写固件</font>")
-
-        # if button_str == u"升级程序":
-        #     image_path = unicode(self.fm_lineedit.text())
-        #     if len(image_path) > 0:
-        #         print image_path
-        #         self.xes_encode.usb_dfu_init( image_path )
-        #         self.usbhidmonitor.cmd_decode.iamge_cmd_cnt = 0
-        #         self.image_timer.start(300)
-        #         self.progressDialog=QProgressDialog(self)
-        #         self.progressDialog.setWindowModality(Qt.WindowModal)
-        #         self.progressDialog.setMinimumDuration(5)
-        #         self.progressDialog.setWindowTitle(u"请等待")
-        #         self.progressDialog.setLabelText(u"下载中...")
-        #         self.progressDialog.setCancelButtonText(u"取消")
-        #         self.progressDialog.setRange(0,100)
 
     def usb_hid_scan(self):
         usb_list = hid.find_all_hid_devices()

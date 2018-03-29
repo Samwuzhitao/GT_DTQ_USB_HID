@@ -157,6 +157,7 @@ class dtq_xes_ht46():
         self.cmd = None
         self.len = None
         self.data = []
+        self.dfu_s = 0
         self.encode_cmds_name = { 
             "ANSWER_INFO": 0x01,
             "ANSWER_ECHO": 0x04,
@@ -182,7 +183,8 @@ class dtq_xes_ht46():
             0x95: "BIND_START",
             0x97: "BIND_STOP",
             0xA8: "RESET_PORT",
-            0xA1: "CHECK_WL"
+            0xA1: "CHECK_WL",
+            0xB0: "DFU_INFO"
         }
         self.decode_cmds = {
             0x81: self.answer_info_err,
@@ -197,7 +199,8 @@ class dtq_xes_ht46():
             0xA8: self.port_reset_err,
             0x95: self.bind_start_err,
             0x97: self.bind_stop_err,
-            0xA1: self.dev_wl_msg_update
+            0xA1: self.dev_wl_msg_update,
+            0xB0: self.dfu_info_err
         }
 
     '''
@@ -416,6 +419,7 @@ class dtq_xes_ht46():
     # 下发回显指令操作结果返回
     def echo_info_err(self, show_dev, dtq_tcb, msg_arr):
         show_dev(u"R: 发送回显 : ERR: %d " % (msg_arr[0]))
+        # print u"R: 发送回显 : ERR: %d " % (msg_arr[0]
 
     # 发送控制参数操作结果返回
     def ctl_info_err(self, show_dev, dtq_tcb, msg_arr):
@@ -441,6 +445,11 @@ class dtq_xes_ht46():
     def bind_clear_conf_err(self, show_dev, dtq_tcb, msg_arr):
         show_dev(u"R: 清除配置 : ERR: %d " % (msg_arr[0]))
 
+    # DFU开始指令
+    def dfu_info_err(self, show_dev, dtq_tcb, msg_arr):
+        show_dev(u"R: 建立连接成功...")
+        self.dfu_s = 1
+
     # 下发复位端口指令
     def get_reset_port_msg(self, port):
         cof_msg = [0x00, 0x00, 0x00, 0x00]
@@ -454,7 +463,24 @@ class dtq_xes_ht46():
         cof_msg.append(1)
         cof_msg.append(port)
         return cof_msg
+    
+    def get_dfu_msg(self, cmd, image_info):
+        soh_msg = [0x00, 0x00, 0x00, 0x00]
+        # 填充包序号
+        self.jsq_seq = self.jsq_seq + 1
+        seq_arr = self.get_seq_hex_arr(self.jsq_seq)
+        for item in seq_arr:
+            soh_msg.append(item)
+        soh_msg.append(cmd)
+        # 添加包内容
+        soh_msg.append(len(image_info))
+        for item in image_info:
+            soh_msg.append(item)
+        return soh_msg
 
+    '''
+        协议上报解析函数
+    '''
     # 上报答案格式解析
     def answer_info_decode(self, show_dev, dtq_tcb, msg_arr):
         rpos = 0
