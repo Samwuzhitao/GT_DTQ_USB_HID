@@ -14,7 +14,7 @@ from PyQt4.QtCore import *
 from PyQt4.QtGui  import *
 from qprocess import *
 
-class dtq_tcb():
+class dtq():
     def __init__(self, devid):
         # 语音数据管理
         self.devid = devid    # 设备ID
@@ -48,7 +48,7 @@ class dtq_tcb():
         print u"[ %010u ]:播放测试 :%s！" % (self.devid, self.f_name)
 
     # 数据校验
-    def check(self,show_dev):
+    def check(self,r_lcd):
         # 校验
         max_size = 0
         f = open(self.f_path, 'rb')
@@ -87,7 +87,7 @@ class dtq_tcb():
         info_str = u"\t理论文件大小:%d 实际文件大小:%d 检验总长度:%d \r\n" % \
             (max_size,int(os.path.getsize(self.f_path)),cnt_size)
         msg_str = info_str + check_str
-        show_dev(msg_str)
+        r_lcd.put(msg_str)
 
     # MP3 格式检测
     def mp3_format_check(self, voice_data):
@@ -97,7 +97,7 @@ class dtq_tcb():
             return False
 
     # 转换文件
-    def decode(self, show_dev):
+    def decode(self, r_lcd):
         self.f_path = os.path.abspath("./") + '/VOICE/%s' % (self.f_name)
         cnt_size = 0
         msg_str = ""
@@ -118,17 +118,17 @@ class dtq_tcb():
         msg_str += u"丢包统计：\r\n"
         msg_str += u"错帧统计：\r\n"
         msg_str += format_err
-        show_dev(msg_str)
+        r_lcd.put(msg_str)
         self.voice_dict.clear()
         self.state = 0
 
     # 打印提示信息
-    def get_update_f_name(self, show_dev, voice_info, vocie_msg):
+    def get_update_f_name(self, r_lcd, voice_info, vocie_msg):
         if voice_info["FLG"] == 0 and voice_info["POS"] == 1:
             voice_time = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
             self.f_name = "VOICE_%010u_%s.mp3" % (self.devid, voice_time)
             msg_str = u"[ %010u ]:录音开始 :%s！" % (self.devid, self.f_name)
-            show_dev(msg_str)
+            r_lcd.put(msg_str)
             # 记录初始数据
             # print voice_info
             self.pac_cnt = 1
@@ -137,7 +137,7 @@ class dtq_tcb():
             self.state = 1
 
     # 语音数据分析
-    def decode_porcess(self, show_dev, voice_info, vocie_msg):
+    def decode_porcess(self, r_lcd, voice_info, vocie_msg):
         # print "PAC[%3d] HEADER:%02X %02X %02X %02X %02X" % (voice_info["POS"],
         #     vocie_msg[0], vocie_msg[1], vocie_msg[2], vocie_msg[3], vocie_msg[4])
         if voice_info["POS"] not in self.voice_dict:
@@ -146,7 +146,7 @@ class dtq_tcb():
         if voice_info["FLG"] == 1:
             self.stop_pos = voice_info["POS"]
             # 解码
-            self.decode(show_dev)
+            self.decode(r_lcd)
 
 class dtq_xes_ht46():
     def __init__(self):
@@ -286,9 +286,9 @@ class dtq_xes_ht46():
         return time_str
 
     # 添加白名单
-    def get_dtq_tcb(self, devid):
+    def get_dtq(self, devid):
         if devid not in self.dtqdict:
-            self.dtqdict[devid] = dtq_tcb(devid)
+            self.dtqdict[devid] = dtq(devid)
         return self.dtqdict[devid]
 
     '''
@@ -297,22 +297,22 @@ class dtq_xes_ht46():
     # 下发回显指令
     def get_echo_cmd_msg(self, devid, msg):
         echo_msg = []
-        dtq_tcb = self.get_dtq_tcb(devid)
+        dtq = self.get_dtq(devid)
         # 填充设备ID
-        uid_arr = self.get_uid_arr_pos(dtq_tcb.devid)
+        uid_arr = self.get_uid_arr_pos(dtq.devid)
         for item in uid_arr:
             echo_msg.append(item)
         # 填充包序号
-        dtq_tcb.seq_add()
-        seq_arr = self.get_seq_hex_arr(dtq_tcb.send_seq)
+        dtq.seq_add()
+        seq_arr = self.get_seq_hex_arr(dtq.send_seq)
         for item in seq_arr:
             echo_msg.append(item)
         # 设置包指令
         echo_msg.append(self.encode_cmds_name["ANSWER_ECHO"])
         # 添加包内容
-        msg_arr = self.get_gbk_hex_arr(msg)
-        echo_msg.append(len(msg_arr))
-        for item in msg_arr:
+        msg = self.get_gbk_hex_arr(msg)
+        echo_msg.append(len(msg))
+        for item in msg:
             echo_msg.append(item)
         return echo_msg
 
@@ -327,30 +327,30 @@ class dtq_xes_ht46():
         que_msg.append(self.encode_cmds_name["ANSWER_INFO"])
         # 添加包内容
         tim_arr = self.get_cur_bcd_time_arr()
-        msg_arr = self.get_gbk_hex_arr(msg)
+        msg = self.get_gbk_hex_arr(msg)
         # 添加长度
-        que_msg.append(len(tim_arr)+len(msg_arr)+1)
+        que_msg.append(len(tim_arr)+len(msg)+1)
         # 添加时间
         for item in tim_arr:
             que_msg.append(item)
         # 添加题型
         que_msg.append(q_t)
         # 添加内容
-        for item in msg_arr:
+        for item in msg:
             que_msg.append(item)
         return que_msg
 
     # 下发答题器控制指令
     def get_dtq_ctl_msg(self, devid, led_s, beep_s, motor_s):
         ctl_msg = []
-        dtq_tcb = self.get_dtq_tcb(devid)
+        dtq = self.get_dtq(devid)
         # 填充设备ID
-        uid_arr = self.get_uid_arr_pos(dtq_tcb.devid)
+        uid_arr = self.get_uid_arr_pos(dtq.devid)
         for item in uid_arr:
             ctl_msg.append(item)
         # 填充包序号
-        dtq_tcb.seq_add()
-        seq_arr = self.get_seq_hex_arr(dtq_tcb.send_seq)
+        dtq.seq_add()
+        seq_arr = self.get_seq_hex_arr(dtq.send_seq)
         for item in seq_arr:
             ctl_msg.append(item)
         # 设置包指令
@@ -413,41 +413,41 @@ class dtq_xes_ht46():
         return self.get_jsq_cmd_init("CHECK_WL")
 
     # 下发题目指令操作结果返回
-    def answer_info_err(self, show_dev, dtq_tcb, msg_arr):
-        show_dev(u"R: 发送题目 : ERR: %d " % (msg_arr[0]))
+    def answer_info_err(self, uid_list, r_lcd, dtq, msg):
+        r_lcd.put(u"R: 发送题目 : ERR: %d " % (msg[0]))
 
     # 下发回显指令操作结果返回
-    def echo_info_err(self, show_dev, dtq_tcb, msg_arr):
-        show_dev(u"R: 发送回显 : ERR: %d " % (msg_arr[0]))
-        # print u"R: 发送回显 : ERR: %d " % (msg_arr[0]
+    def echo_info_err(self, uid_list, r_lcd, dtq, msg):
+        r_lcd.put(u"R: 发送回显 : ERR: %d " % (msg[0]))
+        # print u"R: 发送回显 : ERR: %d " % (msg[0]
 
     # 发送控制参数操作结果返回
-    def ctl_info_err(self, show_dev, dtq_tcb, msg_arr):
-        show_dev(u"R: 答题器控制 : ERR: %d " % (msg_arr[0]))
+    def ctl_info_err(self, uid_list, r_lcd, dtq, msg):
+        r_lcd.put(u"R: 答题器控制 : ERR: %d " % (msg[0]))
 
     # 复位端口指令
-    def port_reset_err(self, show_dev, dtq_tcb, msg_arr):
-        show_dev(u"R: 复位端口 : ERR: %d " % (msg_arr[0]))
+    def port_reset_err(self, uid_list, r_lcd, dtq, msg):
+        r_lcd.put(u"R: 复位端口 : ERR: %d " % (msg[0]))
 
     # 复位端口指令
-    def set_rf_ch_err(self, show_dev, dtq_tcb, msg_arr):
-        show_dev(u"R: 修改信道 : ERR: %d " % (msg_arr[0]))
+    def set_rf_ch_err(self, uid_list, r_lcd, dtq, msg):
+        r_lcd.put(u"R: 修改信道 : ERR: %d " % (msg[0]))
 
     # 开始绑定指令
-    def bind_start_err(self, show_dev, dtq_tcb, msg_arr):
-        show_dev(u"R: 开始绑定 : ERR: %d " % (msg_arr[0]))
+    def bind_start_err(self, uid_list, r_lcd, dtq, msg):
+        r_lcd.put(u"R: 开始绑定 : ERR: %d " % (msg[0]))
 
     # 停止绑定指令
-    def bind_stop_err(self, show_dev, dtq_tcb, msg_arr):
-        show_dev(u"R: 停止绑定 : ERR: %d " % (msg_arr[0]))
+    def bind_stop_err(self, uid_list, r_lcd, dtq, msg):
+        r_lcd.put(u"R: 停止绑定 : ERR: %d " % (msg[0]))
 
     # 清除配置
-    def bind_clear_conf_err(self, show_dev, dtq_tcb, msg_arr):
-        show_dev(u"R: 清除配置 : ERR: %d " % (msg_arr[0]))
+    def bind_clear_conf_err(self, uid_list, r_lcd, dtq, msg):
+        r_lcd.put(u"R: 清除配置 : ERR: %d " % (msg[0]))
 
     # DFU开始指令
-    def dfu_info_err(self, show_dev, dtq_tcb, msg_arr):
-        show_dev(u"R: 建立连接成功...")
+    def dfu_info_err(self, uid_list, r_lcd, dtq, msg):
+        r_lcd.put(u"R: 建立连接成功...")
         self.dfu_s = 1
 
     # 下发复位端口指令
@@ -482,140 +482,152 @@ class dtq_xes_ht46():
         协议上报解析函数
     '''
     # 上报答案格式解析
-    def answer_info_decode(self, show_dev, dtq_tcb, msg_arr):
+    def answer_info_decode(self, uid_list, r_lcd, dtq, msg):
         rpos = 0
-        cnt_dict = {}
-        show_msg = "R: [ %10u ] RSSI: -%d, " % (dtq_tcb.devid, msg_arr[rpos: rpos+1][0])
+        tree_dict = {}
+        show_msg = "R: [ %010u ] RSSI: -%3d, " % (dtq.devid, msg[rpos: rpos+1][0])
         rpos = rpos + 1  # RSSI
         rpos = rpos + 9  # TIME
-        show_msg += "POWER:%d, " %  msg_arr[rpos: rpos+1][0]
+        show_msg += "POWER:%6d, " %  msg[rpos: rpos+1][0]
         rpos = rpos + 4  # POWER
-        show_msg += "PRESS:%d, " % self.uid_pos_code(msg_arr[rpos: rpos+4])
+        show_msg += "PRESS:%6d, " % self.uid_pos_code(msg[rpos: rpos+4])
         rpos = rpos + 4  # PRESS
-        show_msg += "KEY:%d, " % self.uid_pos_code(msg_arr[rpos: rpos+4])
+        show_msg += "KEY:%6d, " % self.uid_pos_code(msg[rpos: rpos+4])
         rpos = rpos + 4  # KEY
-        show_msg += "SEND:%d, " % self.uid_pos_code(msg_arr[rpos: rpos+4])
+        show_msg += "SEND:%6d, " % self.uid_pos_code(msg[rpos: rpos+4])
         rpos = rpos + 4  # SEND
-        show_msg += "ECHO:%d, " % self.uid_pos_code(msg_arr[rpos: rpos+4])
+        show_msg += "ECHO:%6d, " % self.uid_pos_code(msg[rpos: rpos+4])
         rpos = rpos + 4  # ECHO
-        answer_type = msg_arr[rpos: rpos+1][0]
+        answer_type = msg[rpos: rpos+1][0]
         show_msg += "TYPE:%x, " % answer_type
         rpos = rpos + 1  # TYPE
         if (answer_type < 4) or (answer_type > 5):
-            show_msg += "ANSWERS:%x " % (msg_arr[rpos: rpos+1][0])
+            show_msg += "ANSWERS:%x " % (msg[rpos: rpos+1][0])
         else:
-            show_msg += "ANSWERS:%s " % (u"{0}".format(msg_arr[rpos: rpos+16]))
-        show_dev(show_msg)
-        dtq_tcb.answer_cnt = dtq_tcb.answer_cnt + 1
-        cnt_dict["UID"] = dtq_tcb.devid
-        cnt_dict["ANSWER"] = dtq_tcb.answer_cnt
-        cnt_dict["CMD"] = "ANSWER"
-        return cnt_dict
+            show_msg += "ANSWERS:%s " % (u"{0}".format(msg[rpos: rpos+16]))
+        r_lcd.put(show_msg)
+        dtq.answer_cnt = dtq.answer_cnt + 1
+        tree_dict["UID"] = dtq.devid
+        tree_dict["ANSWER"] = dtq.answer_cnt
+        tree_dict["CMD"] = "ANSWER"
+        return tree_dict
 
     # 上报语音格式解析
-    def answer_voice_update(self, show_dev, dtq_tcb, voice_arr):
+    def answer_voice_update(self, uid_list, r_lcd, dtq, msg):
         voice_msg = {}
-        cnt_dict = {}
+        tree_dict = {}
         rpos = 0
-        voice_msg["RSSI"] = voice_arr[rpos:rpos+1][0]
+        voice_msg["RSSI"] = msg[rpos:rpos+1][0]
         rpos = rpos + 1     # RSSI
-        voice_msg["FLG"] = voice_arr[rpos:rpos+1][0]
+        voice_msg["FLG"] = msg[rpos:rpos+1][0]
         rpos = rpos + 1     # FLG
-        pac_num = voice_arr[rpos:rpos+2]
+        pac_num = msg[rpos:rpos+2]
         voice_msg["POS"] = (pac_num[0] << 8 | pac_num[1])
         # print "POS = %d " % voice_msg["POS"]
         rpos = rpos + 2     # PAC_NUM
-        voice_data = voice_arr[rpos:rpos+208]
+        voice_data = msg[rpos:rpos+208]
         # debug_str = "R: "
         # for item in voice_data:
         #    debug_str += " %02X" % (item)
         # print debug_str
         rpos = rpos + 208   # PAC_VOICE
-        # print voice_arr[rpos:]
-        dtq_tcb.state_step[dtq_tcb.state](show_dev, voice_msg, voice_data)
+        # print msg[rpos:]
+        dtq.state_step[dtq.state](r_lcd, voice_msg, voice_data)
         # 返回处理结果
-        cnt_dict["UID"] = dtq_tcb.devid
-        cnt_dict["VOICE_FLG"] = voice_msg["FLG"]
-        cnt_dict["VOICE"] = dtq_tcb.pac_cnt
-        cnt_dict["CMD"] = "VOICE"
-        return cnt_dict
+        tree_dict["UID"] = dtq.devid
+        tree_dict["VOICE_FLG"] = voice_msg["FLG"]
+        tree_dict["VOICE"] = dtq.pac_cnt
+        tree_dict["CMD"] = "VOICE"
+        return tree_dict
 
    # 上报刷卡格式解析
-    def card_id_update(self, show_dev, dtq_tcb, msg_arr):
+    def card_id_update(self, uid_list, r_lcd, dtq, msg):
         rpos = 0
-        cnt_dict = {}
-        uid = self.uid_neg_code(msg_arr[rpos:rpos+4])
-        print msg_arr[rpos:rpos+4]
-        devid = self.uid_pos_code(msg_arr[rpos:rpos+4])
+        tree_dict = {}
+        uid = self.uid_neg_code(msg[rpos:rpos+4])
+        devid = self.uid_pos_code(msg[rpos:rpos+4])
         rpos = rpos + 4
-        rep_uid = self.uid_neg_code(msg_arr[rpos:rpos+4])
+        rep_uid = self.uid_neg_code(msg[rpos:rpos+4])
         # 返回处理结果
         show_msg = u"R: CARD_INFO: UID: [ %010u ] REP_UID:[ %10u ] " % (uid, rep_uid)
-        show_dev(show_msg)
-        cnt_dict["UID"] = uid
-        cur_dtq_tcb = self.get_dtq_tcb(devid)
-        cur_dtq_tcb.card_cnt = cur_dtq_tcb.card_cnt + 1
-        cnt_dict["CARD_ID"] = cur_dtq_tcb.card_cnt
-        cnt_dict["CMD"] = "CARD_ID"
-        return cnt_dict
+        r_lcd.put(show_msg)
+        if uid not in uid_list:
+            uid_list.append(uid)
+        cur_dtq = self.get_dtq(devid)
+        cur_dtq.card_cnt = cur_dtq.card_cnt + 1
+        tree_dict["UID"] = uid
+        tree_dict["CARD_ID"] = cur_dtq.card_cnt
+        tree_dict["CMD"] = "CARD_ID"
+        return tree_dict
 
-    def dev_info_msg_update(self, show_dev, dtq_tcb, msg_arr):
+    def dev_info_msg_update(self, uid_list, r_lcd, dtq, msg):
         rpos = 0
-        dev_id = self.uid_neg_code(msg_arr[rpos:rpos+4])
+        dev_id = self.uid_neg_code(msg[rpos:rpos+4])
         rpos = rpos + 4
-        sf_version = "v%d.%d.%d" % (msg_arr[rpos], msg_arr[rpos+1], msg_arr[rpos+2])
+        sf_version = "v%d.%d.%d" % (msg[rpos], msg[rpos+1], msg[rpos+2])
         rpos = rpos + 3   # SF_VERSION
         rpos = rpos + 15  # HW_VERSION
         rpos = rpos + 8   # COMPLANY
-        rf_ch = msg_arr[rpos:rpos+1][0]
+        rf_ch = msg[rpos:rpos+1][0]
         rpos = rpos + 1   # RF_CH
-        tx_power = msg_arr[rpos:rpos+1][0]
+        tx_power = msg[rpos:rpos+1][0]
         # 返回处理结果
         show_msg = u"R: 查看设备信息 : DEVICE_ID:[ %10u ] SF_VERSION: %s, RF_CH: %d,  RF_TX_POWER: %d " % \
             (dev_id, sf_version, rf_ch, tx_power)
-        show_dev(show_msg)
+        r_lcd.put(show_msg)
 
-    def dev_wl_msg_update(self, show_dev, dtq_tcb, msg_arr):
+    def dev_wl_msg_update(self, uid_list, r_lcd, dtq, msg):
         show_msg = u"R: 查看白名单 : "
-        wl_len = int(len(msg_arr) / 5)
+        wl_len = int(len(msg) / 5)
         show_msg += u"WL_LEN:%d \r\n" % (wl_len)
         rpos = 0
+        wl_list = {}
+        # 解析白名单
         for upos in range(0, wl_len):
-            pos = msg_arr[rpos]
-            uid_arr = msg_arr[rpos+1: rpos+5]
-            show_msg += u"PORT[ %d ] UPOS[%2d ] UID:[ %010u ],  " % \
-                ((pos&0xF0)>>4, (pos&0x0F), self.uid_neg_code(uid_arr))
-            if((upos+1) % 3 == 0):
-                show_msg += "\r\n"
+            port = (msg[rpos]&0xF0)>>4
+            upos = (msg[rpos]&0x0F)
+            uid = self.uid_neg_code(msg[rpos+1: rpos+5])
+            if port not in wl_list:
+                wl_list[port] = {}
+                wl_list[port][upos] = uid
+                if uid not in uid_list:
+                    uid_list.append(uid)
+            else:
+                if upos not in  wl_list[port]:
+                    wl_list[port][upos] = uid
+                    if uid not in uid_list:
+                        uid_list.append(uid)
             rpos = rpos + 5
-        show_dev(show_msg)
+        for port in wl_list:
+            show_msg += "PORT%d:" % port
+            for item in wl_list[port]:
+                show_msg += u" [%d:%010u]" % (item,wl_list[port][item])
+            show_msg += "\r\n"
+        r_lcd.put(show_msg)
 
     '''
         协议上报指令解析函数
     '''
-    def answer_cmd_decode(self, show_dev, msg_arr):
-        if msg_arr:
-            pac_info = {}
-            cnt_dict = {}
+    def answer_cmd_decode(self, uid_list, r_lcd, msg):
+        if msg:
+            tree_dict = {}
             rpos = 1
-            pac_info["UID"] = self.uid_neg_code(msg_arr[rpos:rpos+4])
-            dtq_tcb = self.get_dtq_tcb(pac_info["UID"])
-            rpos = rpos + 4
-            pac_info["SEQ"] = self.uid_pos_code(msg_arr[rpos:rpos+4])
-            rpos = rpos + 4
-            cur_cmd = msg_arr[rpos:rpos+1][0]
-            rpos = rpos + 1
-            if cur_cmd in self.decode_cmds_name:
-                pac_info["CMD"] = self.decode_cmds_name[cur_cmd]
-                pac_info["LEN"] = msg_arr[rpos:rpos+1][0]
-                rpos = rpos + 1
-                if cur_cmd in self.decode_cmds:
-                    cnt_dict = self.decode_cmds[cur_cmd](show_dev, dtq_tcb, msg_arr[rpos: rpos+pac_info["LEN"]])
-                else:
-                    print "NOP PROCESS!"
+            uid= self.uid_neg_code(msg[rpos:rpos+4])
+            if uid != 0:
+                if uid not in uid_list:
+                    uid_list.append(uid)
+            dtq = self.get_dtq(uid)
+            rpos = rpos + 4  # UID
+            rpos = rpos + 4  # SEQ
+            r_cmd = msg[rpos:rpos+1][0]
+            rpos = rpos + 1  # CMD
+            r_len = msg[rpos:rpos+1][0]
+            rpos = rpos + 1  # LEN
+            if r_cmd in self.decode_cmds:
+                tree_dict = self.decode_cmds[r_cmd](uid_list, r_lcd, dtq, msg[rpos: rpos+r_len])
             else:
                 print "UNKONW CMD!"
-            return cnt_dict
+            return tree_dict
 
 if __name__=='__main__':
     wl_dict = {}
