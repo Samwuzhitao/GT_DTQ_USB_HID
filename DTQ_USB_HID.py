@@ -183,7 +183,7 @@ class dtq_hid_debuger(QWidget):
         for pos in range(1, 9):
             self.tree_com.setColumnWidth(pos, 70)
 
-        self.port_frame = tag_ui(30)
+        self.port_frame = tag_ui(30, self.r_lcd_buf)
 
         box = QVBoxLayout()
         box.addLayout(e_hbox)
@@ -216,6 +216,9 @@ class dtq_hid_debuger(QWidget):
         self.fm_update_button.clicked.connect(self.btn_event_callback)
         self.ctl_button.clicked.connect(self.btn_event_callback)
         self.q_combo.currentIndexChanged.connect(self.q_combo_changed_callback)
+        # 按键双击操作的实现
+        self.connect(self.tree_com, SIGNAL("itemDoubleClicked (QTreeWidgetItem *, int)"), self.tree_com_itemDoubleClicked)
+        self.connect(self.tree_com, SIGNAL("itemClicked (QTreeWidgetItem *, int)"), self.tree_com_itemClicked)
 
         # 下载数据处理进程
         self.usb_dfu_timer = QTimer()
@@ -227,9 +230,6 @@ class dtq_hid_debuger(QWidget):
         # 创建 USB 数据解析进程， USB 发送数据进程
         self.usb_rbuf_process = QProcessNoStop(self.usb_cmd_rev_process)
         self.usb_sbuf_process = QProcessNoStop(self.usb_cmd_snd_process)
-        # 按键双击操作的实现
-        self.connect(self.tree_com, SIGNAL("itemDoubleClicked (QTreeWidgetItem *, int)"), self.tree_com_itemDoubleClicked)
-        self.connect(self.tree_com, SIGNAL("itemClicked (QTreeWidgetItem *, int)"), self.tree_com_itemClicked)
 
     # 数据显示进程
     def r_lcd_process(self):
@@ -582,9 +582,9 @@ class dtq_hid_debuger(QWidget):
             self.ser_bt.setText(u"关闭DTQ监测设备")
             self.port_frame.uart_scan()
             r_cmd_str = u"R: 打开监测端口:"
-            for item in self.port_frame.port_list:
-                print self.port_frame.port_list[item].port
-                r_cmd_str += "[ %s ]" % self.port_frame.port_list[item].port
+            for item in self.port_frame.port_name_dict:
+                print self.port_frame.port_name_dict[item]
+                r_cmd_str += "[ %s ]" % self.port_frame.port_name_dict[item]
             self.r_lcd_buf.put(r_cmd_str)
             return
 
@@ -593,9 +593,9 @@ class dtq_hid_debuger(QWidget):
             self.ser_bt.setText(u"打开DTQ监测设备")
             self.port_frame.uart_close()
             r_cmd_str = u"R: 关闭监测端口:"
-            for item in self.port_frame.port_list:
-                # print self.port_frame.port_list[item].port
-                r_cmd_str += "[ %s ]" % self.port_frame.port_list[item].port
+            for item in self.port_frame.port_name_dict:
+                # print self.port_frame.port_name_dict[item].port
+                r_cmd_str += "[ %s ]" % self.port_frame.port_name_dict[item]
             self.r_lcd_buf.put(r_cmd_str)
             return
 
