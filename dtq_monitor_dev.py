@@ -10,54 +10,6 @@ import datetime
 import time
 import os
 
-class monitor_cmd_decode():
-    def __init__(self):
-        self.sts = 0
-        self.cnt = 0
-        self.cmd = []
-
-    def r_machine(self,x):
-        char = ord(x)
-        # print "%02X" % char
-        if self.sts == 0:
-            self.cmd = []
-            if char == 0x61:
-                self.cmd.append(char)
-                self.sts = 1
-            return
-
-        if self.sts == 1:
-            self.cmd.append(char)
-            self.sts = 2
-            self.cnt = 2
-            return
-
-        if self.sts == 2:
-            self.cmd.append(char)
-            self.cnt = self.cnt - 1
-            if self.cnt == 0:
-                self.sts = 3
-                self.cnt = (self.cmd[2]  & 0xFF ) | ((self.cmd[3] << 8) & 0xFF00)
-            return
-
-        if self.sts == 3:
-            self.cmd.append(char)
-            self.cnt = self.cnt - 1
-            if self.cnt == 0:
-                self.sts = 4
-            return
-
-        if self.sts == 4:
-            self.cmd.append(char)
-            if char == 0x21:
-                self.sts = 0
-                print self.cmd
-                return self.cmd
-            else:
-                self.cmd = []
-                return
-
-
 class dtq_cmd_decode():
     def __init__(self):
         self.sts = 0
@@ -97,7 +49,7 @@ class dtq_cmd_decode():
             if self.cnt == 0:
                 if char == 0x21:
                     self.sts = 0
-                    print self.cmd
+                    # print self.cmd
                     return self.cmd
             return
 
@@ -105,7 +57,12 @@ class dtq_cmd_decode():
 class dtq_monitor_dev():
     def __init__(self):
         self.PAC_LEN = 252
-        self.decode_cmds = {}
+        self.pac_num = 0
+        self.decode_cmds = {
+            0x7E: self.voice_data_update,
+            # 0x10: self.answer_data_update
+        }
+        self.seq = 1
 
     '''
         协议内部数值转化函数
@@ -155,13 +112,13 @@ class dtq_monitor_dev():
     '''
     # 查询设备信息指令
     def get_dev_info_msg(self):
-        cmd = "61 30 00 00 21"
+        cmd = "61 05 20 11 22 33 44 00 FF 21"
         cmd = str(cmd.replace(' ',''))
         cmd = cmd.decode("hex")
         return cmd
     # 设置端口指令
     def get_rf_set_msg(self, addr, rx_ch, tx_ch, esb_mode):
-        cmd = "61 01 07 00"
+        cmd = "61 05 01 11 22 33 44 07"
         cmd += "%02X" % addr[0]
         cmd += "%02X" % addr[1]
         cmd += "%02X" % addr[2]
@@ -169,20 +126,134 @@ class dtq_monitor_dev():
         cmd += "%02X" % rx_ch
         cmd += "%02X" % tx_ch
         cmd += "%02X" % esb_mode
-        cmd += "21"
+        cmd += "FF 21"
         cmd = str(cmd.replace(' ',''))
         cmd = cmd.decode("hex")
         return cmd
     # 发送数据指令
-    def send_data_cmd(self, arr_msg):
-        cmd = "61 10"
+    def get_send_data_msg(self, arr_msg):
+        cmd = "61 05 10"
+        seq_arr = self.get_uid_arr_pos(self.seq)
+        self.seq = self.seq + 1
+        for item in seq_arr:
+            cmd += "%02X" % (item)
         cmd += "%02X" % (len(arr_msg) & 0xFF)
-        cmd += "%02X" % (((len(arr_msg) & 0xFF00) >> 8) & 0xFF)
         for item in arr_msg:
             cmd += "%02X" % (item)
-        cmd += "21"
+        cmd += "FF 21"
         cmd = str(cmd.replace(' ',''))
         cmd = cmd.decode("hex")
         return cmd
+
+    # 发送语音测试数据
+    def get_voice_test_msg(self, uid):
+        cmd = "61 05 7E"
+        cmdid_arr = self.get_uid_arr_pos(self.seq)
+        self.seq = self.seq + 1
+        for item in cmdid_arr:
+            cmd += "%02X" % (item)
+        # len
+        cmd += "%02X" % (208+2+1+4+4+1)
+        cmd += "00"   # RSSI
+        qid = 1
+        seq_arr = self.get_uid_arr_pos(qid)
+        for item in seq_arr:
+            cmd += "%02X" % (item)
+        seq_arr = self.get_uid_arr_pos(uid)
+        for item in seq_arr:
+            cmd += "%02X" % (item)
+        cmd += "00"   # FLG
+        cmd += "%02X" % (((self.pac_num & 0xFF00) >> 8) & 0xFF)  # FLG
+        cmd += "%02X" % (self.pac_num & 0xFF)
+        self.pac_num = (self.pac_num + 1) % 100
+        # if
+        for pos in range(0,208):
+            cmd += "%02X" % (pos)
+        cmd += "FF 21"
+        cmd = str(cmd.replace(' ',''))
+        # print cmd
+        cmd = cmd.decode("hex")
+        return cmd
+
+
+        # self.seq = self.seq + 1
         
+    '''
+        协议指令解析
+    '''
+    def cmd_decode(self, r_lcd, r_cmd):
+        r_pos = 1
+        dev = r_cmd[r_pos:r_pos+1][0]
+        r_pos = r_pos + 1
+        cmd = r_cmd[r_pos:r_pos+1][0]
+        r_pos = r_pos + 1
+        cmd_id = r_cmd[r_pos:r_pos+4]
+        r_pos = r_pos + 4
+        pac_len = r_cmd[r_pos:r_pos+1][0]
+        r_pos = r_pos + 1
+        data = r_cmd[r_pos:r_pos+pac_len]
+        r_pos = r_pos + pac_len
+        # str_msg = "DEV:%d CMD:%02X CMDID: %08x, DATA:" % (dev, cmd, self.uid_pos_code(cmd_id))
+        # for item in data:
+        #     str_msg += " %02X" % item
+        # r_lcd.put(str_msg)
+        if cmd in self.decode_cmds:
+            self.decode_cmds[cmd](r_lcd, dev, data)
+
+    def voice_data_update(self, r_lcd, dev, msg):
+        r_pos = 0
+        rssi = msg[r_pos:r_pos+1][0]
+        r_pos = r_pos + 1
+        qid_arr = msg[r_pos:r_pos+4]
+        r_pos = r_pos + 4
+        uid_arr = msg[r_pos:r_pos+4]
+        r_pos = r_pos + 4
+        str_msg = "[ %d ][ %010u ] " % (dev, self.uid_neg_code(uid_arr))
+        flg =  msg[r_pos:r_pos+1][0]
+        r_pos = r_pos + 1
+        pac_num_arr = msg[r_pos:r_pos+2]
+        r_pos = r_pos + 2
+        pac_num = pac_num_arr[0] << 8 | pac_num_arr[1]
+        str_msg += "flg: %d, pac_num: %3d, mp3_check:" % (flg, pac_num)
+        mp3_header = msg[r_pos:r_pos+5]
+        for item in mp3_header:
+            str_msg += " %02X" % item
+        r_lcd.put(str_msg)
+
+    def answer_data_update(self, r_lcd, dev, msg):
+        r_pos = 0
+        rssi = msg[r_pos:r_pos+1][0]
+        r_pos = r_pos + 1
+        r_cmd = msg[r_pos:r_pos+1][0]
+        r_pos = r_pos + 1  # RF_CMD
+        r_pos = r_pos + 1  # RF_LEN
+        if r_cmd == 0x02:
+            qid_arr = msg[r_pos:r_pos+4]
+            r_pos = r_pos + 4
+            uid_arr = msg[r_pos:r_pos+4]
+            r_pos = r_pos + 4
+            str_msg = "[ %d ][ %010u ] " % (dev, self.uid_neg_code(uid_arr))
+
+            str_msg += "POWER:%1d, " % msg[r_pos: r_pos+1][0]
+            r_pos = r_pos + 4  # POWER
+            str_msg += "PRESS:%6d, " % self.uid_pos_code(msg[r_pos: r_pos+4])
+            r_pos = r_pos + 4  # PRESS
+            str_msg += "KEY:%6d, " % self.uid_pos_code(msg[r_pos: r_pos+4])
+            r_pos = r_pos + 4  # KEY
+            str_msg += "SEND:%6d, " % self.uid_pos_code(msg[r_pos: r_pos+4])
+            r_pos = r_pos + 4  # SEND
+            str_msg += "ECHO:%6d, " % self.uid_pos_code(msg[r_pos: r_pos+4])
+            r_pos = r_pos + 4  # ECHO
+            answer_type = msg[r_pos: r_pos+1][0]
+            str_msg += "TYPE:%x, " % answer_type
+            r_pos = r_pos + 1  # TYPE
+            if (answer_type < 4) or (answer_type > 5):
+                str_msg += "ANSWERS:%x " % (msg[r_pos: r_pos+1][0])
+            else:
+                str_msg += "ANSWERS:%s " % (u"{0}".format(msg[r_pos: r_pos+16]))
+            r_lcd.put(str_msg)
+
+
+
+
 

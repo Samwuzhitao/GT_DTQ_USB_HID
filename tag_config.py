@@ -19,7 +19,7 @@ from dtq_ht46_dev  import *
 from com_monitor  import *
 
 class tag_ui(QFrame):
-    def __init__(self, size, r_lcd, parent=None):
+    def __init__(self, size, s_lcd, r_lcd, parent=None):
         self.port_name_dict = {}
         self.uart_dict = {}
         self.led_list  = []
@@ -35,6 +35,7 @@ class tag_ui(QFrame):
         }
         # 数据显示缓存
         self.r_lcd = r_lcd
+        self.s_lcd = s_lcd
         self.dev_pro = dtq_monitor_dev()
 
         super(tag_ui, self).__init__(parent)
@@ -102,14 +103,16 @@ class tag_ui(QFrame):
 
     def uart_s_cmd_fun(self, pos):
         # arr_msg = [0x61, 0x01, 0x07, 0x00, 0x46, 0x82, 0x20, 0xD2, 0x59, 0x5A, 0x00, 0x21]
-        arr_msg =[]
-        arr_msg = self.s_cmd_pro_dict[pos].get_check_dev_info_msg()
-        s_cmd = self.dev_pro.send_data_cmd(arr_msg)
+        arr_msg =[0x11, 0x22, 0x33, 0x44]
+        
+        # arr_msg = self.s_cmd_pro_dict[pos].get_check_dev_info_msg()
+        s_cmd = self.dev_pro.get_voice_test_msg(2140216871)
         # s_cmd = self.dev_pro.send_data_cmd(s_cmd)
-        r_cmd_str = "S:"
-        for item in s_cmd:
-            r_cmd_str += " %02X" % ord(item)
-        print r_cmd_str
+        r_cmd_str = "S: [ %10u ]" % (2140216871)
+        # for item in s_cmd:
+        #     r_cmd_str += " %02X" % ord(item)
+        # print r_cmd_str
+        self.s_lcd.put(r_cmd_str)
         if self.uart_dict[pos].isOpen() == True:
             self.uart_dict[pos].write(s_cmd)
 
@@ -139,9 +142,9 @@ class tag_ui(QFrame):
                     tx_ch = 0x5A
                     work_mode = unicode(self.led_combo_dict[pos].currentText())
                     if work_mode == u"监测":
-                        self.r_cmd_process_dict[pos] = ComMonitor(ser)
+                        self.r_cmd_process_dict[pos] = ComMonitor(pos, ser, self.r_lcd)
                         self.r_cmd_process_dict[pos].start()
-                        print " r_cmd_process_dict process start "
+                        # print " r_cmd_process_dict process start "
                         esb_mode = 1
                         s_cmd = self.dev_pro.get_rf_set_msg(addr, rx_ch, tx_ch, esb_mode)
                         if self.uart_dict[pos].isOpen() == True:
@@ -153,7 +156,7 @@ class tag_ui(QFrame):
                             self.uart_dict[pos].write(s_cmd)
                         self.app_port_minitor_init(pos)
                         self.s_cmd_timer_dict[pos].start(200)
-                        print " s_cmd_timer_dict process start "
+                        # print " s_cmd_timer_dict process start "
                 except serial.SerialException:
                     pass
                 
@@ -177,12 +180,12 @@ class tag_ui(QFrame):
                 ser = serial.Serial( "COM%d" % i, 256000, timeout = 0.5)
                 if ser.isOpen() == True:
                     ser.write(s_cmd)
-                    r_cmd = ser.read(12)
+                    r_cmd = ser.read(18)
                     r_cmd_str = "" 
                     for item in r_cmd:
                         r_cmd_str += "%02X" % ord(item)
                     if r_cmd_str:
-                        if r_cmd_str[0:8] == "61B00700": # 打开串口OK
+                        if r_cmd_str[0:8] == "6105A011": # 打开串口OK
                             self.led_list[port_pos].set_color("blue")
                             self.port_name_dict[port_pos] = "COM%d" % i
                             ser.close()
@@ -195,8 +198,13 @@ class tag_ui(QFrame):
         for item in self.port_name_dict:
             if item in self.uart_dict:
                 if self.uart_dict[item].isOpen() == True:
-                    self.uart_dict[item].close() 
+                    self.uart_dict[item].close()
+                    self.s_cmd_timer_dict[item].stop()
             self.led_list[item].set_color("gray")
+        self.led1_bt.setText(u"[0]开始")
+        self.led2_bt.setText(u"[1]开始")
+        self.led3_bt.setText(u"[2]开始")
+        self.led4_bt.setText(u"[3]开始")
 
 
 

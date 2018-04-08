@@ -11,13 +11,15 @@ from PyQt4.QtGui  import *
 from dtq_monitor_dev import *
 
 class ComMonitor(QThread):
-    def __init__(self, com, parent=None):
+    def __init__(self, port, com, r_buf, parent=None):
         super(ComMonitor,self).__init__(parent)
         self.working  = True
+        self.port = port
         self.com = com
-        self.r_monitor_cmd = monitor_cmd_decode()
         self.r_dtq_cmd = dtq_cmd_decode()
+        self.r_cmd_decode = dtq_monitor_dev()
         self.state = 0
+        self.r_buf = r_buf
 
     def __del__(self):
         self.working=False
@@ -28,18 +30,14 @@ class ComMonitor(QThread):
             if self.com.isOpen() == True:
                 try:
                     r_char = self.com.read(1)
-                    if self.state == 0:
-                        r_cmd = self.r_monitor_cmd.r_machine(r_char)
-                    else:
-                        r_cmd = self.r_dtq_cmd.r_machine(r_char)
-
+                    r_cmd = self.r_dtq_cmd.r_machine(r_char)
                 except serial.SerialException:
                     self.working = False
                     pass
                 if r_cmd:
-                    r_cmd_str = "R: "
-                    for item in r_cmd:
-                        r_cmd_str += " %02X" % item
-                    print r_cmd_str
-                    # self.rcmd.clear()
-                    # self.emit(SIGNAL('r_cmd_message(QString, QString)'),self.com.portstr,r_cmd)
+                    self.r_cmd_decode.cmd_decode(self.r_buf, r_cmd)
+                    # r_cmd_str = "[ PORT%d ] R:" % self.port
+                    # for item in r_cmd:
+                    #     r_cmd_str += " %02X" % item
+                    # self.r_buf.put(r_cmd_str)
+                

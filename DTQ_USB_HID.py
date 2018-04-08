@@ -36,6 +36,7 @@ class dtq_hid_debuger(QWidget):
         self.rev_buf = Queue.Queue()
         self.snd_buf = Queue.Queue()
         self.r_lcd_buf = Queue.Queue()
+        self.s_lcd_buf = Queue.Queue()
         # 表格 UID名单
         self.qtree_dict = {}
         self.dtq_cnt_dict = {}
@@ -54,7 +55,7 @@ class dtq_hid_debuger(QWidget):
         self.com_combo.setFixedSize(170, 20)
         self.usb_hid_scan()
         self.usb_bt = QPushButton(u"打开USB设备")
-        self.ser_bt = QPushButton(u"打开DTQ监测设备")
+        self.ser_bt = QPushButton(u"搜索DTQ监测设备")
         self.clr_bt = QPushButton(u"清空数据")
         self.pp_test_button = QPushButton(u"开始单选乒乓")
         self.bind_button = QPushButton(u"开始绑定")
@@ -183,7 +184,7 @@ class dtq_hid_debuger(QWidget):
         for pos in range(1, 9):
             self.tree_com.setColumnWidth(pos, 70)
 
-        self.port_frame = tag_ui(30, self.r_lcd_buf)
+        self.port_frame = tag_ui(30, self.s_lcd_buf, self.r_lcd_buf)
 
         box = QVBoxLayout()
         box.addLayout(e_hbox)
@@ -227,6 +228,9 @@ class dtq_hid_debuger(QWidget):
         self.r_lcd_timer = QTimer()
         self.r_lcd_timer.timeout.connect(self.r_lcd_process)
         self.r_lcd_timer.start(20)
+        self.s_lcd_timer = QTimer()
+        self.s_lcd_timer.timeout.connect(self.s_lcd_process)
+        self.s_lcd_timer.start(20)
         # 创建 USB 数据解析进程， USB 发送数据进程
         self.usb_rbuf_process = QProcessNoStop(self.usb_cmd_rev_process)
         self.usb_sbuf_process = QProcessNoStop(self.usb_cmd_snd_process)
@@ -236,6 +240,12 @@ class dtq_hid_debuger(QWidget):
         if not self.r_lcd_buf.empty():
             r_msg = self.r_lcd_buf.get()
             self.r_browser.append(r_msg )
+
+    # 数据显示进程
+    def s_lcd_process(self):
+        if not self.s_lcd_buf.empty():
+            s_msg = self.s_lcd_buf.get()
+            self.s_browser.append(s_msg )
 
     # 单击获取设备ID
     def tree_com_itemClicked(self, item, column):
@@ -264,7 +274,7 @@ class dtq_hid_debuger(QWidget):
             print "CHECK"
             # 发送镜像信息
             if self.dev_pro.dfu_s == 0:
-                self.s_browser.append(u"S: 开始连接设备...")
+                self.s_lcd_buf.put(u"S: 开始连接设备...")
                 if self.dfu_pro.f_offset == 0:
                     image_info = self.dfu_pro.usb_dfu_soh_pac()
                     if image_info:
@@ -291,7 +301,7 @@ class dtq_hid_debuger(QWidget):
                 return
             # 发送镜像数据
             if self.dev_pro.dfu_s == 3:
-                self.s_browser.append(u"S: 数据传输完成...")
+                self.s_lcd_buf.put(u"S: 数据传输完成...")
                 self.alive    = False
                 self.dev_dict = {}
                 self.usb_dfu_timer.stop()
@@ -313,7 +323,7 @@ class dtq_hid_debuger(QWidget):
                         self.dev_pro = dtq_xes_ht46()
                         self.usb_rbuf_process.start()
                         self.usb_sbuf_process.start()
-                        self.s_browser.append(u"打开设备:[ %s ] 成功！" % item )
+                        self.s_lcd_buf.put(u"打开设备:[ %s ] 成功！" % item )
                         self.usb_bt.setText(u"关闭USB设备")
                 # 扫描 JSQ 设备
                 if self.dev_pro.dfu_s == 3:
@@ -325,7 +335,7 @@ class dtq_hid_debuger(QWidget):
                         self.dev_pro = dtq_xes_ht46()
                         self.usb_rbuf_process.start()
                         self.usb_sbuf_process.start()
-                        self.s_browser.append(u"打开设备:[ %s ] 成功！" % item )
+                        self.s_lcd_buf.put(u"打开设备:[ %s ] 成功！" % item )
                         msg = self.dev_pro.get_check_wl_msg()
                         self.usb_snd_to_buf(msg)
                         self.usb_bt.setText(u"关闭USB设备")
@@ -440,7 +450,7 @@ class dtq_hid_debuger(QWidget):
                     self.dev_pro = dtq_xes_ht46()
                     self.usb_rbuf_process.start()
                     self.usb_sbuf_process.start()
-                self.s_browser.append(u"打开设备:[ %s ] 成功！" % usb_port )
+                self.s_lcd_buf.put(u"打开设备:[ %s ] 成功！" % usb_port )
                 msg = self.dev_pro.get_check_wl_msg()
                 self.usb_snd_to_buf(msg)
                 self.usb_bt.setText(u"关闭USB设备")
@@ -454,7 +464,7 @@ class dtq_hid_debuger(QWidget):
                 self.usb_rbuf_process.quit()
                 self.report = None
                 self.dev_pro = None
-                self.s_browser.append(u"关闭设备成功！")
+                self.s_lcd_buf.put(u"关闭设备成功！")
             self.usb_bt.setText(u"打开USB设备")
             return
 
@@ -523,14 +533,14 @@ class dtq_hid_debuger(QWidget):
                 msg = self.dev_pro.get_bind_start_msg()
                 self.usb_snd_to_buf(msg)
                 self.bind_button.setText(u"停止绑定")
-                self.s_browser.append(u"S: 开始绑定: 绑定开始！请将需要测试的答题器刷卡绑定！")
+                self.s_lcd_buf.put(u"S: 开始绑定: 绑定开始！请将需要测试的答题器刷卡绑定！")
             return
 
         if button_str == u"清除配置":
             if self.alive:
                 msg = self.dev_pro.get_clear_dev_info_msg()
                 self.usb_snd_to_buf(msg)
-                self.s_browser.append(u"S: 清除配置: ")
+                self.s_lcd_buf.put(u"S: 清除配置: ")
             return
         
         if button_str == u"同步状态":
@@ -545,14 +555,14 @@ class dtq_hid_debuger(QWidget):
                 print (devid, leds, beeps, motors)
                 msg = self.dev_pro.get_dtq_ctl_msg(devid, leds, beeps, motors)
                 self.usb_snd_to_buf(msg)
-                self.s_browser.append(u"S: 同步状态: UID：[ %10u ]" % devid)
+                self.s_lcd_buf.put(u"S: 同步状态: UID：[ %10u ]" % devid)
             return
 
         if button_str == u"查看白名单":
             if self.alive:
                 msg = self.dev_pro.get_check_wl_msg()
                 self.usb_snd_to_buf(msg)
-                self.s_browser.append(u"S: 查看白名单:")
+                self.s_lcd_buf.put(u"S: 查看白名单:")
             return
         
         if button_str == u"添加固件":
@@ -577,11 +587,11 @@ class dtq_hid_debuger(QWidget):
                 self.progressDialog.setRange(0,100)
             return
 
-        if button_str == u"打开DTQ监测设备":
-            self.s_browser.setText(u"S: 打开DTQ监测设备 ")
+        if button_str == u"搜索DTQ监测设备":
+            self.s_browser.setText(u"S: 搜索DTQ监测设备 ")
             self.ser_bt.setText(u"关闭DTQ监测设备")
             self.port_frame.uart_scan()
-            r_cmd_str = u"R: 打开监测端口:"
+            r_cmd_str = u"R: 搜索到监测端口:"
             for item in self.port_frame.port_name_dict:
                 print self.port_frame.port_name_dict[item]
                 r_cmd_str += "[ %s ]" % self.port_frame.port_name_dict[item]
@@ -590,7 +600,7 @@ class dtq_hid_debuger(QWidget):
 
         if button_str == u"关闭DTQ监测设备":
             self.s_browser.setText(u"S: 关闭DTQ监测设备 ")
-            self.ser_bt.setText(u"打开DTQ监测设备")
+            self.ser_bt.setText(u"搜索DTQ监测设备")
             self.port_frame.uart_close()
             r_cmd_str = u"R: 关闭监测端口:"
             for item in self.port_frame.port_name_dict:
