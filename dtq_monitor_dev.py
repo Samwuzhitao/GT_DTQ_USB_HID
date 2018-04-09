@@ -60,7 +60,7 @@ class dtq_monitor_dev():
         self.pac_num = 0
         self.decode_cmds = {
             0x7E: self.voice_data_update,
-            # 0x10: self.answer_data_update
+            0x10: self.answer_data_update
         }
         self.seq = 1
 
@@ -111,14 +111,15 @@ class dtq_monitor_dev():
         协议下发指令生成函数
     '''
     # 查询设备信息指令
-    def get_dev_info_msg(self):
-        cmd = "61 05 20 11 22 33 44 00 FF 21"
+    def get_stop_esb_msg(self):
+        cmd = "61 05 02 11 22 33 44 00 FF 21"
         cmd = str(cmd.replace(' ',''))
         cmd = cmd.decode("hex")
         return cmd
     # 设置端口指令
-    def get_rf_set_msg(self, addr, rx_ch, tx_ch, esb_mode):
-        cmd = "61 05 01 11 22 33 44 07"
+    def get_start_esb_msg(self, port, addr, rx_ch, tx_ch, esb_mode):
+        cmd = "61 05 01 11 22 33 44 08"
+        cmd += "%02X" % port
         cmd += "%02X" % addr[0]
         cmd += "%02X" % addr[1]
         cmd += "%02X" % addr[2]
@@ -174,9 +175,6 @@ class dtq_monitor_dev():
         # print cmd
         cmd = cmd.decode("hex")
         return cmd
-
-
-        # self.seq = self.seq + 1
         
     '''
         协议指令解析
