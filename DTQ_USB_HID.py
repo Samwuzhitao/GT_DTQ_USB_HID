@@ -379,6 +379,8 @@ class dtq_hid_debuger(QWidget):
                     self.usb_bt.setText(u"打开USB设备")
                     self.dev_dict = {}
                     self.alive = False
+                    self.usb_dfu_timer.start(300)
+                    self.s_lcd_buf.put(u"发送数据失败！")
                 r_cmd = u"发送数据：S : {0}".format(r_cmd)
                 logging.debug(r_cmd)
 
