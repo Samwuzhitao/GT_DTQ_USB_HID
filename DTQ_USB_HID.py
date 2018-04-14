@@ -424,6 +424,16 @@ class dtq_hid_debuger(QWidget):
                     cur_msg = u"[ %s ]: %d " % (tree_dict["CMD"], tree_dict[tree_dict["CMD"]])
                     s_msg = self.dev_pro.get_echo_cmd_msg(uid, cur_msg)
                     self.usb_snd_to_buf(s_msg)
+            r_answer_cnt = 0
+            s_answer_cnt = 0
+            if  "cnt_r" in self.sys_info:
+                for item in self.sys_info["cnt_r"]:
+                    r_answer_cnt = r_answer_cnt + self.sys_info["cnt_r"][item]
+                    s_answer_cnt = s_answer_cnt + self.sys_info["cnt_s1"][item]
+                self.k_sum_lineedit.setText(str(s_answer_cnt))
+                self.r_sum_lineedit.setText(str(r_answer_cnt))
+                self.k_rate_lineedit.setText("%f" % (r_answer_cnt*100.0/s_answer_cnt))
+
 
     '''
     * Fun Name    : btn_event_callback

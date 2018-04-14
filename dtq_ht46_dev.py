@@ -487,6 +487,7 @@ class dtq_xes_ht46():
         show_msg += "KEY:%6d, " % self.uid_pos_code(msg[rpos: rpos+4])
         rpos = rpos + 4  # KEY
         show_msg += "SEND:%6d, " % self.uid_pos_code(msg[rpos: rpos+4])
+        cnt_start = self.uid_pos_code(msg[rpos: rpos+4])
         rpos = rpos + 4  # SEND
         show_msg += "ECHO:%6d, " % self.uid_pos_code(msg[rpos: rpos+4])
         rpos = rpos + 4  # ECHO
@@ -502,6 +503,22 @@ class dtq_xes_ht46():
         tree_dict["UID"] = dtq.devid
         tree_dict["ANSWER"] = dtq.answer_cnt
         tree_dict["CMD"] = "ANSWER"
+        if "cnt_r" not in uid_dict:
+            uid_dict["cnt_r"] = {}
+            uid_dict["cnt_s0"] = {}
+            uid_dict["cnt_s1"] = {}
+            uid_dict["cnt_r"][dtq.devid] = dtq.answer_cnt
+            uid_dict["cnt_s0"][dtq.devid] = cnt_start-1
+            uid_dict["cnt_s1"][dtq.devid] = cnt_start - uid_dict["cnt_s0"][dtq.devid]
+        else:
+            if dtq.devid not in uid_dict["cnt_r"]:
+                uid_dict["cnt_r"][dtq.devid] = dtq.answer_cnt
+                uid_dict["cnt_s0"][dtq.devid] = cnt_start-1
+                uid_dict["cnt_s1"][dtq.devid] = cnt_start - uid_dict["cnt_s0"][dtq.devid]
+            else:
+                uid_dict["cnt_r"][dtq.devid] = dtq.answer_cnt
+                uid_dict["cnt_s1"][dtq.devid] = cnt_start - uid_dict["cnt_s0"][dtq.devid]
+                # r_lcd.put("[ %10u ] cur_pos = %d start_pos = %d" % (dtq.devid, cnt_start, uid_dict["cnt_s0"][dtq.devid]))
         return tree_dict
 
     # 上报语音格式解析
@@ -632,9 +649,13 @@ class dtq_xes_ht46():
             rpos = rpos + 1  # LEN
             if r_cmd in self.decode_cmds:
                 tree_dict = self.decode_cmds[r_cmd](uid_dict, r_lcd, dtq, msg[rpos: rpos+r_len])
+                return tree_dict
             else:
-                print "UNKONW CMD!"
-            return tree_dict
+                str_msg = "R: UNKONW CMD!"
+                for item in r_cmd:
+                    str_msg += " %02X" % item
+                r_lcd.put(str_msg)
+                return
 
 if __name__=='__main__':
     wl_dict = {}
