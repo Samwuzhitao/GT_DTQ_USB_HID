@@ -35,13 +35,14 @@ class dtq_hid_debuger(QWidget):
         # 数据缓冲区
         self.rev_buf = Queue.Queue()
         self.snd_buf = Queue.Queue()
-        self.r_lcd_buf = Queue.Queue()
+        self.r_lcd_buf = Queue.Queue(maxsize=100)
+        self.r_tree_buf = Queue.Queue(maxsize=40)
         self.s_lcd_buf = Queue.Queue()
         # 表格 UID名单
         self.qtree_dict = {}
         self.dtq_cnt_dict = {}
         self.mp3_player_dict = {}
-        self.sys_info = {}
+        self.uid_list = {}
         # USB 设备管理
         self.dev_dict = {}
         self.alive = False
@@ -50,7 +51,7 @@ class dtq_hid_debuger(QWidget):
         # 升级协议
         self.dfu_pro = None
 
-        self.setWindowTitle(u"USB HID调试工具v2.0.9")
+        self.setWindowTitle(u"USB HID调试工具v2.0.10")
         self.com_combo = QComboBox(self)
         self.com_combo.setFixedSize(170, 20)
         self.usb_hid_scan()
@@ -170,8 +171,10 @@ class dtq_hid_debuger(QWidget):
 
         self.r_browser = QTextBrowser ()
         self.r_browser.setFixedHeight(160)
+        self.r_browser.document().setMaximumBlockCount(100)
         self.s_browser = QTextBrowser ()
         self.s_browser.setFixedHeight(80)
+        self.s_browser.document().setMaximumBlockCount(100)
 
         self.tree_com = QTreeWidget()
         self.tree_com.setFont(QFont(u"答题器数据统计", 8, False))
@@ -184,7 +187,7 @@ class dtq_hid_debuger(QWidget):
         for pos in range(1, 9):
             self.tree_com.setColumnWidth(pos, 70)
 
-        self.port_frame = tag_ui(30, self.sys_info, self.s_lcd_buf, self.r_lcd_buf)
+        self.port_frame = tag_ui(30, self.uid_list, self.s_lcd_buf, self.r_lcd_buf)
 
         box = QVBoxLayout()
         box.addLayout(e_hbox)
@@ -224,22 +227,37 @@ class dtq_hid_debuger(QWidget):
         # 下载数据处理进程
         self.usb_dfu_timer = QTimer()
         self.usb_dfu_timer.timeout.connect(self.usb_dfu_process)
-        # 下载数据处理进程
+        # GUI 数据处理进程
         self.r_lcd_timer = QTimer()
         self.r_lcd_timer.timeout.connect(self.r_lcd_process)
-        self.r_lcd_timer.start(20)
+        self.r_lcd_timer.start(10)
         self.s_lcd_timer = QTimer()
         self.s_lcd_timer.timeout.connect(self.s_lcd_process)
-        self.s_lcd_timer.start(20)
-        # 创建 USB 数据解析进程， USB 发送数据进程
+        self.s_lcd_timer.start(10)
+        self.r_tree_timer = QTimer()
+        self.r_tree_timer.timeout.connect(self.r_tree_process)
+        self.r_tree_timer.start(10)
+        # 创建 USB 数据解析进程
         self.usb_rbuf_process = QProcessNoStop(self.usb_cmd_rev_process)
+        # 创建 USB 发送数据进程
         self.usb_sbuf_process = QProcessNoStop(self.usb_cmd_snd_process)
+
+    def r_tree_process(self):
+        if not self.r_tree_buf.empty():
+            tree_msg = self.r_tree_buf.get()
+            pos = int(tree_msg.split(":")[0])
+            uid = str(tree_msg.split(":")[1])
+            msg = str(tree_msg.split(":")[2])
+            self.qtree_dict[uid].setText(pos, msg)
 
     # 数据显示进程
     def r_lcd_process(self):
         if not self.r_lcd_buf.empty():
             r_msg = self.r_lcd_buf.get()
             self.r_browser.append(r_msg )
+
+    def r_lcd_hook(self, msg):
+        self.r_lcd_buf.put(msg)
 
     # 数据显示进程
     def s_lcd_process(self):
@@ -271,7 +289,7 @@ class dtq_hid_debuger(QWidget):
 
     def usb_dfu_process(self):
         if self.alive:
-            print "CHECK"
+            # print "CHECK"
             # 发送镜像信息
             if self.dev_pro.dfu_s == 0:
                 self.s_lcd_buf.put(u"S: 开始连接设备...")
@@ -279,12 +297,12 @@ class dtq_hid_debuger(QWidget):
                     image_info = self.dfu_pro.usb_dfu_soh_pac()
                     if image_info:
                         msg = self.dev_pro.get_dfu_msg(0x30, image_info)
-                        self.usb_snd_to_buf(msg)
+                        self.usb_snd_store(msg)
                         return
             # 切换定时器
             if self.dev_pro.dfu_s == 1:
                 self.usb_dfu_timer.stop()
-                self.usb_dfu_timer.start(20)
+                self.usb_dfu_timer.start(10)
                 self.dev_pro.dfu_s = 2
 
             # 切换定时器
@@ -293,7 +311,7 @@ class dtq_hid_debuger(QWidget):
                 if image_data:
                     msg = self.dev_pro.get_dfu_msg(0x31, image_data)
                     if msg != None:
-                        self.usb_snd_to_buf(msg)
+                        self.usb_snd_store(msg)
                         self.progressDialog_value = (self.dfu_pro.f_offset * 100) / self.dfu_pro.f_size
                         self.progressDialog.setValue(self.progressDialog_value)
                 else:
@@ -320,7 +338,7 @@ class dtq_hid_debuger(QWidget):
                         self.dev_dict[item].set_raw_data_handler(self.usb_rev_to_buf)
                         self.report = self.dev_dict[item].find_output_reports()
                         self.alive  = True
-                        self.dev_pro = dtq_xes_ht46()
+                        self.dev_pro = dtq_xes_ht46(self.r_lcd_hook)
                         self.usb_rbuf_process.start()
                         self.usb_sbuf_process.start()
                         self.s_lcd_buf.put(u"打开设备:[ %s ] 成功！" % item )
@@ -332,22 +350,22 @@ class dtq_hid_debuger(QWidget):
                         self.dev_dict[item].set_raw_data_handler(self.usb_rev_to_buf)
                         self.report = self.dev_dict[item].find_output_reports()
                         self.alive  = True
-                        self.dev_pro = dtq_xes_ht46()
+                        self.dev_pro = dtq_xes_ht46(self.r_lcd_hook)
                         self.usb_rbuf_process.start()
                         self.usb_sbuf_process.start()
                         self.s_lcd_buf.put(u"打开设备:[ %s ] 成功！" % item )
                         msg = self.dev_pro.get_check_wl_msg()
-                        self.usb_snd_to_buf(msg)
+                        self.usb_snd_store(msg)
                         self.usb_bt.setText(u"关闭USB设备")
                         self.dev_pro.dfu_s = 0
                         self.usb_dfu_timer.stop()
 
     '''
-    * Fun Name    : usb_snd_to_buf
+    * Fun Name    : usb_snd_store
     * Description : HID 底层发送数据函数
     * Input       : msg
     '''
-    def usb_snd_to_buf(self, msg):
+    def usb_snd_store(self, msg):
         # 复制指令码到发送数组
         self.snd_buf.put(msg)
         # debug_str = "S: "
@@ -361,7 +379,6 @@ class dtq_hid_debuger(QWidget):
     * Input       : msg
     '''
     def usb_cmd_snd_process(self):
-        # if len(self.snd_buf) > 0:
         if not self.snd_buf.empty():
             msg = self.snd_buf.get()
             r_cmd = [0x00]
@@ -379,6 +396,8 @@ class dtq_hid_debuger(QWidget):
                     self.usb_bt.setText(u"打开USB设备")
                     self.dev_dict = {}
                     self.alive = False
+                    self.usb_sbuf_process.stop()
+                    self.dev_pro.dfu_s = 3
                     self.usb_dfu_timer.start(300)
                     self.s_lcd_buf.put(u"发送数据失败！")
                 r_cmd = u"发送数据：S : {0}".format(r_cmd)
@@ -402,38 +421,45 @@ class dtq_hid_debuger(QWidget):
     * Input       : None
     ''' 
     def usb_cmd_rev_process(self):
-        # if len(self.rev_buf) > 0:
         if not self.rev_buf.empty():
             r_cmd = self.rev_buf.get()
             # 此处指令解析放在协议文件的内部实现，方便实现硬件的兼容
-            tree_dict = self.dev_pro.answer_cmd_decode(self.sys_info, self.r_lcd_buf, r_cmd)
+            tree_dict = self.dev_pro.answer_cmd_decode(self.uid_list, r_cmd)
+            
+            r_answer_cnt = 0
+            s_answer_cnt = 0
+            lost_rate = 100
+            if  "cnt_r" in self.uid_list:
+                for item in self.uid_list["cnt_r"]:
+                    r_answer_cnt = r_answer_cnt + self.uid_list["cnt_r"][item]
+                    s_answer_cnt = s_answer_cnt + self.uid_list["cnt_s1"][item]
+                self.k_sum_lineedit.setText(str(s_answer_cnt))
+                self.r_sum_lineedit.setText(str(r_answer_cnt))
+                lost_rate = r_answer_cnt*100.0/s_answer_cnt
+                self.k_rate_lineedit.setText("%f" % lost_rate)
+
             # 获取指令中的ID
             if tree_dict:
                 logging.debug(u"接收数据：R : {0}".format(tree_dict))
                 uid = tree_dict["UID"]
                 # 更新 GUI 界面
-                if uid not in self.qtree_dict:
-                    self.qtree_dict[uid] = QTreeWidgetItem(self.tree_com)
-                    self.qtree_dict[uid].setText(0, str(len(self.qtree_dict)))
-                    self.qtree_dict[uid].setText(1, "%010u" % (uid))
+                tree_key = "%010u" % uid
+                if tree_key not in self.qtree_dict:
+                    self.qtree_dict[tree_key] = QTreeWidgetItem(self.tree_com)
+                    self.qtree_dict[tree_key].setText(0, str(len(self.qtree_dict)))
+                    self.qtree_dict[tree_key].setText(1, tree_key)
                     if tree_dict["CMD"] in self.tree_name_pos:
-                        self.qtree_dict[uid].setText(self.tree_name_pos[tree_dict["CMD"]], str(tree_dict[tree_dict["CMD"]]))
+                        str_msg = "%d:%010u:%d" % (self.tree_name_pos[tree_dict["CMD"]], uid, tree_dict[tree_dict["CMD"]])
+                        self.r_tree_buf.put(str_msg)
                 else:
-                    self.qtree_dict[uid].setText(self.tree_name_pos[tree_dict["CMD"]], str(tree_dict[tree_dict["CMD"]]))
+                    str_msg = "%d:%010u:%d" % (self.tree_name_pos[tree_dict["CMD"]], uid, tree_dict[tree_dict["CMD"]])
+                    self.r_tree_buf.put(str_msg)
                 if tree_dict["CMD"] != "VOICE":
-                    cur_msg = u"[ %s ]: %d " % (tree_dict["CMD"], tree_dict[tree_dict["CMD"]])
+                    cur_msg  = u"[ %s ]: %7d " % (tree_dict["CMD"][0:2], tree_dict[tree_dict["CMD"]])
+                    cur_msg += " "*16
+                    cur_msg += u"[ RA ]: %3.3f" % (lost_rate)
                     s_msg = self.dev_pro.get_echo_cmd_msg(uid, cur_msg)
-                    self.usb_snd_to_buf(s_msg)
-            r_answer_cnt = 0
-            s_answer_cnt = 0
-            if  "cnt_r" in self.sys_info:
-                for item in self.sys_info["cnt_r"]:
-                    r_answer_cnt = r_answer_cnt + self.sys_info["cnt_r"][item]
-                    s_answer_cnt = s_answer_cnt + self.sys_info["cnt_s1"][item]
-                self.k_sum_lineedit.setText(str(s_answer_cnt))
-                self.r_sum_lineedit.setText(str(r_answer_cnt))
-                self.k_rate_lineedit.setText("%f" % (r_answer_cnt*100.0/s_answer_cnt))
-
+                    self.usb_snd_store(s_msg)
 
     '''
     * Fun Name    : btn_event_callback
@@ -446,6 +472,10 @@ class dtq_hid_debuger(QWidget):
             return
 
         button_str = button.text()
+        if button_str == u"开始单选乒乓":
+            s_msg = self.dev_pro.get_echo_cmd_msg(0x11223344, "cur_msg")
+            self.usb_snd_store(s_msg)
+
         if button_str == u"清空数据":
             self.r_browser.clear()
             self.s_browser.clear()
@@ -459,12 +489,12 @@ class dtq_hid_debuger(QWidget):
                 self.report = self.dev_dict[usb_port].find_output_reports()
                 self.alive = True
                 if self.dev_pro == None:
-                    self.dev_pro = dtq_xes_ht46()
+                    self.dev_pro = dtq_xes_ht46(self.r_lcd_hook)
                     self.usb_rbuf_process.start()
                     self.usb_sbuf_process.start()
                 self.s_lcd_buf.put(u"打开设备:[ %s ] 成功！" % usb_port )
                 msg = self.dev_pro.get_check_wl_msg()
-                self.usb_snd_to_buf(msg)
+                self.usb_snd_store(msg)
                 self.usb_bt.setText(u"关闭USB设备")
                 return
 
@@ -485,10 +515,10 @@ class dtq_hid_debuger(QWidget):
             if self.alive:
                 que_t = int(q_type.split(":")[1][2:])
                 que_t = (que_t / 10)*16 +  que_t % 10
-                print que_t
+                # print que_t
                 cur_msg   = unicode(self.q_lineedit.text())
                 msg = self.dev_pro.get_question_cmd_msg( que_t, cur_msg )
-                self.usb_snd_to_buf( msg )
+                self.usb_snd_store( msg )
                 self.s_lcd_buf.put(u"S: 发送题目 : %s : %s " % ( q_type, cur_msg ))
             return
 
@@ -496,12 +526,12 @@ class dtq_hid_debuger(QWidget):
             i = 0
             msg = unicode(self.cmd_lineedit.text())
             msg_str = u"S: 发送回显 : %s， UID：" % msg
-            if "uid_list" in self.sys_info:
-                for item in self.sys_info["uid_list"]:
+            if "uid_list" in self.uid_list:
+                for item in self.uid_list["uid_list"]:
                     cur_msg = u"[ %d ] %s" % (i, msg)
                     i = i + 1
                     s_msg = self.dev_pro.get_echo_cmd_msg(item, cur_msg)
-                    self.usb_snd_to_buf(s_msg)
+                    self.usb_snd_store(s_msg)
                     msg_str = msg_str + " [ %10u ]" % item
                 self.s_lcd_buf.put(msg_str)
             else:
@@ -511,7 +541,7 @@ class dtq_hid_debuger(QWidget):
         if button_str == u"查看配置":
             if self.alive:
                 msg = self.dev_pro.get_check_dev_info_msg()
-                self.usb_snd_to_buf(msg)
+                self.usb_snd_store(msg)
                 self.s_lcd_buf.put(u"S: 查看设备信息 ")
             return
 
@@ -520,7 +550,7 @@ class dtq_hid_debuger(QWidget):
                 port_type =  unicode(self.port_combo.currentText())
                 port = int(port_type.split(":")[1][2:]) 
                 msg = self.dev_pro.get_reset_port_msg(port)
-                self.usb_snd_to_buf(msg)
+                self.usb_snd_store(msg)
                 self.s_lcd_buf.put(u"S: 复位端口 ")
             return
 
@@ -528,14 +558,14 @@ class dtq_hid_debuger(QWidget):
             if self.alive:
                 ch = int(str(self.ch_lineedit.text()))
                 msg = self.dev_pro.get_set_rf_ch_msg(ch)
-                self.usb_snd_to_buf(msg)
+                self.usb_snd_store(msg)
                 self.s_lcd_buf.put(u"S: 修改信道 ")
             return
 
         if button_str == u"停止绑定":
             if self.alive:
                 msg = self.dev_pro.get_bind_stop_msg()
-                self.usb_snd_to_buf(msg)
+                self.usb_snd_store(msg)
                 self.bind_button.setText(u"开始绑定")
                 self.s_lcd_buf.put(u"S: 停止绑定: 绑定结束！此时刷卡无效")
             return
@@ -543,7 +573,7 @@ class dtq_hid_debuger(QWidget):
         if button_str == u"开始绑定":
             if self.alive:
                 msg = self.dev_pro.get_bind_start_msg()
-                self.usb_snd_to_buf(msg)
+                self.usb_snd_store(msg)
                 self.bind_button.setText(u"停止绑定")
                 self.s_lcd_buf.put(u"S: 开始绑定: 绑定开始！请将需要测试的答题器刷卡绑定！")
             return
@@ -551,7 +581,7 @@ class dtq_hid_debuger(QWidget):
         if button_str == u"清除配置":
             if self.alive:
                 msg = self.dev_pro.get_clear_dev_info_msg()
-                self.usb_snd_to_buf(msg)
+                self.usb_snd_store(msg)
                 self.s_lcd_buf.put(u"S: 清除配置: ")
             return
         
@@ -564,16 +594,16 @@ class dtq_hid_debuger(QWidget):
                 beeps = int(beep_ctl_type.split(":")[1][2:])
                 motor_ctl_type = unicode(self.motor_combo.currentText())
                 motors = int(motor_ctl_type.split(":")[1][2:])
-                print (devid, leds, beeps, motors)
+                # print (devid, leds, beeps, motors)
                 msg = self.dev_pro.get_dtq_ctl_msg(devid, leds, beeps, motors)
-                self.usb_snd_to_buf(msg)
+                self.usb_snd_store(msg)
                 self.s_lcd_buf.put(u"S: 同步状态: UID：[ %10u ]" % devid)
             return
 
         if button_str == u"查看白名单":
             if self.alive:
                 msg = self.dev_pro.get_check_wl_msg()
-                self.usb_snd_to_buf(msg)
+                self.usb_snd_store(msg)
                 self.s_lcd_buf.put(u"S: 查看白名单:")
             return
         
@@ -586,7 +616,7 @@ class dtq_hid_debuger(QWidget):
         if button_str == u"升级程序":
             image_path = unicode(self.fm_lineedit.text())
             if len(image_path) > 0:
-                print image_path
+                # print image_path
                 self.dev_pro.dfu_s = 0
                 self.dfu_pro = file_transfer(image_path, self.dev_pro.PAC_LEN - 21)
                 self.usb_dfu_timer.start(300)
@@ -631,13 +661,14 @@ class dtq_hid_debuger(QWidget):
         return str_gb2312
 
 if __name__=='__main__':
+    app = 0
     app = QApplication(sys.argv)
     datburner = dtq_hid_debuger()
     datburner.show()
-    app.exec_()
+    sys.exit(app.exec_())
     if datburner.alive:
         msg = datburner.dev_pro.get_question_cmd_msg( 0x80, u"关闭软件" )
-        datburner.usb_snd_to_buf( msg )
+        datburner.usb_snd_store( msg )
         while not datburner.snd_buf.empty():
             time.sleep(10)
         

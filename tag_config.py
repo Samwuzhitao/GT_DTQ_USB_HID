@@ -161,7 +161,7 @@ class tag_ui(QFrame):
 
         for port in tmp_port_dict:
             try:
-                ser = serial.Serial( port, 256000, timeout = 0.5)
+                ser = serial.Serial( port, 256000, timeout = 0.1)
                 if ser.isOpen() == True:
                     ser.write(s_cmd)
                     r_cmd = ser.read(18)
