@@ -336,7 +336,8 @@ class dtq_xes_ht46():
         return que_msg
 
     # 下发答题器控制指令
-    def get_dtq_ctl_msg(self, devid, led_s, beep_s, motor_s):
+    def get_dtq_ctl_msg(self, devid, led_cn, led_c, beep_cn, motor_cn):
+        TIME = [0x00, 0x0C, 0x00]
         ctl_msg = []
         dtq = self.get_dtq(devid)
         # 填充设备ID
@@ -351,10 +352,19 @@ class dtq_xes_ht46():
         # 设置包指令
         ctl_msg.append(self.encode_cmds_name["CTL_INFO"])
         # 添加包内容
-        ctl_msg.append(3)
-        ctl_msg.append(led_s)
-        ctl_msg.append(beep_s)
-        ctl_msg.append(motor_s)
+        ctl_msg.append(12)
+        ctl_msg.append(led_cn)
+        ctl_msg.append(led_c)
+        ctl_msg.append(TIME[0])
+        ctl_msg.append(TIME[1])
+        ctl_msg.append(beep_cn)
+        ctl_msg.append(TIME[0])
+        ctl_msg.append(TIME[1])
+        ctl_msg.append(TIME[2])
+        ctl_msg.append(motor_cn)
+        ctl_msg.append(TIME[0])
+        ctl_msg.append(TIME[1])
+        ctl_msg.append(TIME[2])
         return ctl_msg
 
     # 下发设置信道

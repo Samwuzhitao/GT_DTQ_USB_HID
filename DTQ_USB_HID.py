@@ -7,8 +7,9 @@
 import sys
 import random
 import Queue
+import UserString
 import pywinusb.hid as hid
-from  serial.tools import list_ports
+import serial
 from dtq_ht46_dev  import *
 from qprocess      import *
 from file_transfer import *
@@ -97,19 +98,22 @@ class dtq_hid_debuger(QWidget):
         self.devid_label = QLabel(u"uID：")
         self.devid_lineedit = QLineEdit()
         self.led_label = QLabel(u"指示灯：")
+        self.led_color_combo = QComboBox(self)
+        self.led_color_combo.addItems([u"红:0x01", u"绿:0x02", u"蓝:0x03", u"黄:0x04",u"紫:0x05",u"青:0x06",u"白:0x07"])
         self.led_combo = QComboBox(self)
-        self.led_combo.addItems([u"NOP:0x00", u"闪一下:0x01"])
+        self.led_combo.addItems([u"闪:0x01", u"NOP:0x00"])
         self.beep_label = QLabel(u"蜂鸣器：")
         self.beep_combo = QComboBox(self)
-        self.beep_combo.addItems([u"NOP:0x00", u"叫一下:0x01"])
+        self.beep_combo.addItems([u"叫:0x01", u"NOP:0x00"])
         self.motor_label = QLabel(u"电机：")
         self.motor_combo = QComboBox(self)
-        self.motor_combo.addItems([u"NOP:0x00", u"震一下:0x01"])
+        self.motor_combo.addItems([u"震:0x01", u"NOP:0x00"])
         self.ctl_button = QPushButton(u"同步状态")
         s_hbox.addWidget(self.ctl_label)
         s_hbox.addWidget(self.devid_label)
         s_hbox.addWidget(self.devid_lineedit)
         s_hbox.addWidget(self.led_label)
+        s_hbox.addWidget(self.led_color_combo)
         s_hbox.addWidget(self.led_combo)
         s_hbox.addWidget(self.beep_label)
         s_hbox.addWidget(self.beep_combo)
@@ -423,7 +427,7 @@ class dtq_hid_debuger(QWidget):
     def usb_cmd_rev_process(self):
         if not self.rev_buf.empty():
             r_cmd = self.rev_buf.get()
-            # 此处指令解析放在协议文件的内部实现，方便实现硬件的兼容
+            # 此处指令解析放在协议文件的内部实现,方便实现硬件的兼容
             tree_dict = self.dev_pro.answer_cmd_decode(self.uid_list, r_cmd)
             
             r_answer_cnt = 0
@@ -525,7 +529,7 @@ class dtq_hid_debuger(QWidget):
         if button_str == u"发送数据":
             i = 0
             msg = unicode(self.cmd_lineedit.text())
-            msg_str = u"S: 发送回显 : %s， UID：" % msg
+            msg_str = u"S: 发送回显 : %s, UID：" % msg
             if "uid_list" in self.uid_list:
                 for item in self.uid_list["uid_list"]:
                     cur_msg = u"[ %d ] %s" % (i, msg)
@@ -535,7 +539,7 @@ class dtq_hid_debuger(QWidget):
                     msg_str = msg_str + " [ %10u ]" % item
                 self.s_lcd_buf.put(msg_str)
             else:
-                self.s_lcd_buf.put(u"白名单为空，请刷卡！")
+                self.s_lcd_buf.put(u"白名单为空,请刷卡！")
             return
 
         if button_str == u"查看配置":
@@ -588,14 +592,15 @@ class dtq_hid_debuger(QWidget):
         if button_str == u"同步状态":
             if self.alive:
                 devid = int(str(self.devid_lineedit.text()))
-                led_ctl_type = unicode(self.led_combo.currentText())
-                leds = int(led_ctl_type.split(":")[1][2:]) 
-                beep_ctl_type = unicode(self.beep_combo.currentText())
-                beeps = int(beep_ctl_type.split(":")[1][2:])
-                motor_ctl_type = unicode(self.motor_combo.currentText())
-                motors = int(motor_ctl_type.split(":")[1][2:])
-                # print (devid, leds, beeps, motors)
-                msg = self.dev_pro.get_dtq_ctl_msg(devid, leds, beeps, motors)
+                led_cn_str = unicode(self.led_combo.currentText())
+                led_cn = int(led_cn_str.split(":")[1][2:]) 
+                led_col_str = unicode(self.led_color_combo.currentText())
+                led_c = int(led_col_str.split(":")[1][2:]) 
+                beep_cn_str = unicode(self.beep_combo.currentText())
+                beep_cn = int(beep_cn_str.split(":")[1][2:])
+                motor_cn_str = unicode(self.motor_combo.currentText())
+                motor_cn = int(motor_cn_str.split(":")[1][2:])
+                msg = self.dev_pro.get_dtq_ctl_msg(devid, led_cn, led_c, beep_cn, motor_cn)
                 self.usb_snd_store(msg)
                 self.s_lcd_buf.put(u"S: 同步状态: UID：[ %10u ]" % devid)
             return
