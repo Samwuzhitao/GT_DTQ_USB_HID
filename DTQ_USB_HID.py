@@ -158,6 +158,8 @@ class dtq_hid_debuger(QWidget):
         t_hbox.addWidget(self.change_button)
 
         self.q_label = QLabel(u"答题功能：")
+        self.an_devid_label = QLabel(u"uID：")
+        self.an_devid_lineedit = QLineEdit()
         self.q_combo = QComboBox(self)
         self.q_combo.setFixedSize(105, 20)
         self.q_combo.addItems([u"单题单选:0x01", u"是非判断:0x02",
@@ -169,6 +171,8 @@ class dtq_hid_debuger(QWidget):
 
         q_hbox = QHBoxLayout()
         q_hbox.addWidget(self.q_label)
+        q_hbox.addWidget(self.an_devid_label)
+        q_hbox.addWidget(self.an_devid_lineedit)
         q_hbox.addWidget(self.q_combo)
         q_hbox.addWidget(self.q_lineedit)
         q_hbox.addWidget(self.q_button)
@@ -272,6 +276,7 @@ class dtq_hid_debuger(QWidget):
     # 单击获取设备ID
     def tree_com_itemClicked(self, item, column):
         self.devid_lineedit.setText(unicode(item.text(1)))
+        self.an_devid_lineedit.setText(unicode(item.text(1)))
 
     # 双击获取设备ID
     def tree_com_itemDoubleClicked(self, item, column):
@@ -515,13 +520,18 @@ class dtq_hid_debuger(QWidget):
             return
 
         if button_str == u"发送题目":
+            devid_str = str(self.an_devid_lineedit.text())
+            if devid_str:
+                devid = int(str(self.an_devid_lineedit.text()))
+            else:
+                devid = 0
             q_type =  unicode(self.q_combo.currentText())
             if self.alive:
                 que_t = int(q_type.split(":")[1][2:])
                 que_t = (que_t / 10)*16 +  que_t % 10
                 # print que_t
                 cur_msg   = unicode(self.q_lineedit.text())
-                msg = self.dev_pro.get_question_cmd_msg( que_t, cur_msg )
+                msg = self.dev_pro.get_question_cmd_msg( devid, que_t, cur_msg )
                 self.usb_snd_store( msg )
                 self.s_lcd_buf.put(u"S: 发送题目 : %s : %s " % ( q_type, cur_msg ))
             return

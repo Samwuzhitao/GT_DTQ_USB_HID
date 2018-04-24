@@ -312,8 +312,12 @@ class dtq_xes_ht46():
         return echo_msg
 
     # 下发题目指令
-    def get_question_cmd_msg(self, q_t, msg):
-        que_msg = [0x00, 0x00, 0x00, 0x00]
+    def get_question_cmd_msg(self, devid, q_t, msg):
+        que_msg = []
+        # 填充设备ID
+        uid_arr = self.get_uid_arr_pos(devid)
+        for item in uid_arr:
+            que_msg.append(item)
         # 填充包序号
         self.jsq_seq = self.jsq_seq + 1
         seq_arr = self.get_seq_hex_arr(self.jsq_seq)
