@@ -341,7 +341,7 @@ class dtq_xes_ht46():
 
     # 下发答题器控制指令
     def get_dtq_ctl_msg(self, devid, led_cn, led_c, beep_cn, motor_cn):
-        TIME = [0x00, 0x0C, 0x00]
+        TIME = [0x02, 0x02, 0x00]
         ctl_msg = []
         dtq = self.get_dtq(devid)
         # 填充设备ID

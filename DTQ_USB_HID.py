@@ -101,13 +101,13 @@ class dtq_hid_debuger(QWidget):
         self.led_color_combo = QComboBox(self)
         self.led_color_combo.addItems([u"红:0x01", u"绿:0x02", u"蓝:0x03", u"黄:0x04",u"紫:0x05",u"青:0x06",u"白:0x07"])
         self.led_combo = QComboBox(self)
-        self.led_combo.addItems([u"闪:0x01", u"NOP:0x00"])
+        self.led_combo.addItems([u"闪:0x01", u"闪:0x02",u"闪:0x03",u"闪:0x04",u"闪:0x05",u"NOP:0x00"])
         self.beep_label = QLabel(u"蜂鸣器：")
         self.beep_combo = QComboBox(self)
-        self.beep_combo.addItems([u"叫:0x01", u"NOP:0x00"])
+        self.beep_combo.addItems([u"叫:0x01", u"叫:0x02",u"叫:0x03",u"叫:0x04",u"叫:0x05",u"NOP:0x00"])
         self.motor_label = QLabel(u"电机：")
         self.motor_combo = QComboBox(self)
-        self.motor_combo.addItems([u"震:0x01", u"NOP:0x00"])
+        self.motor_combo.addItems([u"震:0x01", u"震:0x02",u"震:0x03",u"震:0x04",u"震:0x05",u"NOP:0x00"])
         self.ctl_button = QPushButton(u"同步状态")
         s_hbox.addWidget(self.ctl_label)
         s_hbox.addWidget(self.devid_label)
@@ -405,7 +405,7 @@ class dtq_hid_debuger(QWidget):
                     self.usb_bt.setText(u"打开USB设备")
                     self.dev_dict = {}
                     self.alive = False
-                    self.usb_sbuf_process.stop()
+                    self.usb_sbuf_process.quit()
                     self.dev_pro.dfu_s = 3
                     self.usb_dfu_timer.start(300)
                     self.s_lcd_buf.put(u"发送数据失败！")
