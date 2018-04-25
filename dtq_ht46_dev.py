@@ -31,6 +31,7 @@ class dtq():
         self.send_seq = 0
         # 统计计数
         self.card_cnt = 0
+        self.power_cnt = 0
         self.answer_cnt = 0
 
     # 答题器包号管理
@@ -163,6 +164,7 @@ class dtq_xes_ht46():
             "BIND_START": 0x15,
             "BIND_INFO": 0x16,
             "BIND_STOP": 0x17,
+            "POWER":0x18,
             "RESET_PORT": 0x20,
             "CHECK_WL": 0x21}
         self.decode_cmds_name = {
@@ -186,6 +188,7 @@ class dtq_xes_ht46():
             0x02: self.answer_info_decode,
             0x03: self.answer_voice_update,
             0x16: self.card_id_update,
+            0x18: self.power_state_update,
             0x84: self.echo_info_err,
             0x85: self.ctl_info_err,
             0x91: self.set_rf_ch_err,
@@ -341,7 +344,7 @@ class dtq_xes_ht46():
 
     # 下发答题器控制指令
     def get_dtq_ctl_msg(self, devid, led_cn, led_c, beep_cn, motor_cn):
-        TIME = [0x02, 0x02, 0x00]
+        TIME = [0x05, 0x05, 0x00]
         ctl_msg = []
         dtq = self.get_dtq(devid)
         # 填充设备ID
@@ -588,6 +591,24 @@ class dtq_xes_ht46():
         tree_dict["UID"] = uid
         tree_dict["CARD_ID"] = cur_dtq.card_cnt
         tree_dict["CMD"] = "CARD_ID"
+        return tree_dict
+
+    def power_state_update(self, uid_dict, dtq, msg):
+        tree_dict = {}
+        rpos = 0
+        uid = self.uid_neg_code(msg[rpos:rpos+4])
+        devid = self.uid_pos_code(msg[rpos:rpos+4])
+        rpos = rpos + 4
+        state = msg[rpos:rpos+1][0]
+        rpos = rpos + 1
+        show_msg = u"R: POWER: UID: [ %010u ] STATE:[ %d ] " % (uid, state)
+        self.r_lcd(show_msg)
+        cur_dtq = self.get_dtq(uid)
+        if state == 1:
+            cur_dtq.power_cnt = cur_dtq.power_cnt + 1
+        tree_dict["UID"] = uid
+        tree_dict["POWER"] = cur_dtq.power_cnt
+        tree_dict["CMD"] = "POWER"
         return tree_dict
 
     def dev_info_msg_update(self, uid_dict, dtq, msg):

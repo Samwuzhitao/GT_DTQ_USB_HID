@@ -18,7 +18,7 @@ from dtq_monitor_dev import *
 from dtq_ht46_dev  import *
 from com_monitor  import *
 
-class tag_ui(QFrame):
+class port_frame(QFrame):
     def __init__(self, size, sys_info, s_lcd, r_lcd, parent=None):
         self.sys_info = sys_info
         self.port_name_dict = {}
@@ -31,7 +31,7 @@ class tag_ui(QFrame):
         self.s_lcd = s_lcd
         self.dev_pro = dtq_monitor_dev()
 
-        super(tag_ui, self).__init__(parent)
+        super(port_frame, self).__init__(parent)
         self.led1 = LED(size)
         self.led1_combo = QComboBox(self)
         self.led1_combo.addItems([ u"压测",u"监测"])

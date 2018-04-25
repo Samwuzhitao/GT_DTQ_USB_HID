@@ -10,10 +10,10 @@ import Queue
 import UserString
 import pywinusb.hid as hid
 import serial
-from dtq_ht46_dev  import *
-from qprocess      import *
+from dtq_ht46_dev import *
+from qprocess import *
 from file_transfer import *
-from tag_config    import *
+from port_frame import *
 import logging
 
 # 配置日志输出的方式及格式
@@ -34,8 +34,8 @@ class dtq_hid_debuger(QWidget):
     def __init__(self, parent=None):
         super(dtq_hid_debuger, self).__init__(parent)
         # 数据缓冲区
-        self.rev_buf = Queue.Queue()
-        self.snd_buf = Queue.Queue()
+        self.rcmd_buf = Queue.Queue()
+        self.scmd_buf = Queue.Queue()
         self.r_lcd_buf = Queue.Queue(maxsize=100)
         self.r_tree_buf = Queue.Queue(maxsize=40)
         self.s_lcd_buf = Queue.Queue()
@@ -134,23 +134,23 @@ class dtq_hid_debuger(QWidget):
         k_hbox = QHBoxLayout()
         self.k_sum_label = QLabel(u"按键总和:")
         self.k_sum_label.setFont(QFont("Roman times", 15, QFont.Bold))
-        self.k_sum_lineedit = QLineEdit(u'0')
-        self.k_sum_lineedit.setFont(QFont("Roman times", 15, QFont.Bold))
+        self.sum_sedit = QLineEdit(u'0')
+        self.sum_sedit.setFont(QFont("Roman times", 15, QFont.Bold))
         self.r_sum_label=QLabel(u"接收总和:")
         self.r_sum_label.setFont(QFont("Roman times", 15, QFont.Bold))
-        self.r_sum_lineedit = QLineEdit(u'0')
-        self.r_sum_lineedit.setFont(QFont("Roman times", 15, QFont.Bold))
-        self.k_rate_label = QLabel(u"成功率:")
-        self.k_rate_label.setFont(QFont("Roman times", 15, QFont.Bold))
-        self.k_rate_lineedit = QLineEdit(u'0%')
-        self.k_rate_lineedit.setFont(QFont("Roman times", 15, QFont.Bold))
+        self.sum_redit = QLineEdit(u'0')
+        self.sum_redit.setFont(QFont("Roman times", 15, QFont.Bold))
+        self.sum_rate_label = QLabel(u"成功率:")
+        self.sum_rate_label.setFont(QFont("Roman times", 15, QFont.Bold))
+        self.sum_rate_edit = QLineEdit(u'0%')
+        self.sum_rate_edit.setFont(QFont("Roman times", 15, QFont.Bold))
 
         k_hbox.addWidget(self.k_sum_label)
-        k_hbox.addWidget(self.k_sum_lineedit)
+        k_hbox.addWidget(self.sum_sedit)
         k_hbox.addWidget(self.r_sum_label)
-        k_hbox.addWidget(self.r_sum_lineedit)
-        k_hbox.addWidget(self.k_rate_label)
-        k_hbox.addWidget(self.k_rate_lineedit)
+        k_hbox.addWidget(self.sum_redit)
+        k_hbox.addWidget(self.sum_rate_label)
+        k_hbox.addWidget(self.sum_rate_edit)
 
         t_hbox = QHBoxLayout()
         t_hbox.addWidget(self.cmd_label)
@@ -190,12 +190,12 @@ class dtq_hid_debuger(QWidget):
         self.tree_com.setHeaderLabels([u'序号', u'uID', 
             u'按键次数', u'接收次数', u'回显次数', u'计数初值', 
             u'当前计数值', u'刷卡次数',u'重启次数',u'语音包计数'])
-        self.tree_name_pos = {"ANSWER": 3, u'CARD_ID': 7, "VOICE": 9, "VOICE_FLG": 10}
+        self.tree_name_pos = {"ANSWER": 3, u'CARD_ID': 7, u'POWER': 8, "VOICE": 9, "VOICE_FLG": 10}
         self.tree_com.setColumnWidth(0, 50)
         for pos in range(1, 9):
             self.tree_com.setColumnWidth(pos, 70)
 
-        self.port_frame = tag_ui(30, self.uid_list, self.s_lcd_buf, self.r_lcd_buf)
+        self.port_frame = port_frame(30, self.uid_list, self.s_lcd_buf, self.r_lcd_buf)
 
         box = QVBoxLayout()
         box.addLayout(e_hbox)
@@ -229,8 +229,8 @@ class dtq_hid_debuger(QWidget):
         self.ctl_button.clicked.connect(self.btn_event_callback)
         self.q_combo.currentIndexChanged.connect(self.q_combo_changed_callback)
         # 按键双击操作的实现
-        self.connect(self.tree_com, SIGNAL("itemDoubleClicked (QTreeWidgetItem *, int)"), self.tree_com_itemDoubleClicked)
-        self.connect(self.tree_com, SIGNAL("itemClicked (QTreeWidgetItem *, int)"), self.tree_com_itemClicked)
+        self.connect(self.tree_com, SIGNAL("itemDoubleClicked (QTreeWidgetItem *, int)"), self.tree_2_clicked)
+        self.connect(self.tree_com, SIGNAL("itemClicked (QTreeWidgetItem *, int)"), self.tree_1_clicked)
 
         # 下载数据处理进程
         self.usb_dfu_timer = QTimer()
@@ -274,12 +274,12 @@ class dtq_hid_debuger(QWidget):
             self.s_browser.append(s_msg )
 
     # 单击获取设备ID
-    def tree_com_itemClicked(self, item, column):
+    def tree_1_clicked(self, item, column):
         self.devid_lineedit.setText(unicode(item.text(1)))
         self.an_devid_lineedit.setText(unicode(item.text(1)))
 
     # 双击获取设备ID
-    def tree_com_itemDoubleClicked(self, item, column):
+    def tree_2_clicked(self, item, column):
         uid = int(unicode(item.text(1)))
         self.devid_lineedit.setText(unicode(item.text(1)))
         if uid in self.dev_pro.dtqdict:
@@ -376,7 +376,7 @@ class dtq_hid_debuger(QWidget):
     '''
     def usb_snd_store(self, msg):
         # 复制指令码到发送数组
-        self.snd_buf.put(msg)
+        self.scmd_buf.put(msg)
         # debug_str = "S: "
         # for item in data:
         #    debug_str += " %02X" % (item)
@@ -388,8 +388,8 @@ class dtq_hid_debuger(QWidget):
     * Input       : msg
     '''
     def usb_cmd_snd_process(self):
-        if not self.snd_buf.empty():
-            msg = self.snd_buf.get()
+        if not self.scmd_buf.empty():
+            msg = self.scmd_buf.get()
             r_cmd = [0x00]
             for item in msg:
                 r_cmd.append(item)
@@ -418,7 +418,7 @@ class dtq_hid_debuger(QWidget):
     * Input       : data
     '''
     def usb_rev_to_buf(self, data):
-        self.rev_buf.put(data)
+        self.rcmd_buf.put(data)
         # debug_str = "R: "
         # for item in data:
         #    debug_str += " %02X" % (item)
@@ -430,22 +430,21 @@ class dtq_hid_debuger(QWidget):
     * Input       : None
     ''' 
     def usb_cmd_rev_process(self):
-        if not self.rev_buf.empty():
-            r_cmd = self.rev_buf.get()
+        if not self.rcmd_buf.empty():
+            r_cmd = self.rcmd_buf.get()
             # 此处指令解析放在协议文件的内部实现,方便实现硬件的兼容
             tree_dict = self.dev_pro.answer_cmd_decode(self.uid_list, r_cmd)
-            
-            r_answer_cnt = 0
-            s_answer_cnt = 0
+            sum_rcnt = 0
+            sum_scnt = 0
             lost_rate = 100
             if  "cnt_r" in self.uid_list:
                 for item in self.uid_list["cnt_r"]:
-                    r_answer_cnt = r_answer_cnt + self.uid_list["cnt_r"][item]
-                    s_answer_cnt = s_answer_cnt + self.uid_list["cnt_s1"][item]
-                self.k_sum_lineedit.setText(str(s_answer_cnt))
-                self.r_sum_lineedit.setText(str(r_answer_cnt))
-                lost_rate = r_answer_cnt*100.0/s_answer_cnt
-                self.k_rate_lineedit.setText("%f" % lost_rate)
+                    sum_rcnt = sum_rcnt + self.uid_list["cnt_r"][item]
+                    sum_scnt = sum_scnt + self.uid_list["cnt_s1"][item]
+                self.sum_sedit.setText(str(sum_scnt))
+                self.sum_redit.setText(str(sum_rcnt))
+                lost_rate = sum_rcnt*100.0/sum_scnt
+                self.sum_rate_edit.setText("%f" % lost_rate)
 
             # 获取指令中的ID
             if tree_dict:
@@ -684,7 +683,7 @@ if __name__=='__main__':
     if datburner.alive:
         msg = datburner.dev_pro.get_question_cmd_msg( 0x80, u"关闭软件" )
         datburner.usb_snd_store( msg )
-        while not datburner.snd_buf.empty():
+        while not datburner.scmd_buf.empty():
             time.sleep(10)
         
 
