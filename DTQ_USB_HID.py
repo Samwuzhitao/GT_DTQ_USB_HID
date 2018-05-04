@@ -19,6 +19,7 @@ from file_transfer import *
 import logging
 from dtq_ht46_dev import *
 from port_frame import *
+import cProfile
 
 JSQ_VID = 0x0483
 JSQ_PID = 0x5A4C
@@ -97,9 +98,9 @@ class dtq_hid_debuger(QWidget, hid_event):
         hid_event.__init__(self)
         # 数据缓冲区
         self.rcmd_buf = Queue.Queue()
-        self.scmd_buf = Queue.Queue()
+        self.scmd_buf = Queue.Queue(maxsize=100)
         self.r_lcd_buf = Queue.Queue(maxsize=100)
-        self.r_tree_buf = Queue.Queue(maxsize=40)
+        self.r_tree_buf = Queue.Queue(maxsize=100)
         self.s_lcd_buf = Queue.Queue()
         # 表格 UID名单
         self.qtree_dict = {}
@@ -217,6 +218,27 @@ class dtq_hid_debuger(QWidget, hid_event):
         k_hbox.addWidget(self.sum_rate_label)
         k_hbox.addWidget(self.sum_rate_edit)
 
+        debug_hbox = QHBoxLayout()
+        self.debug_label = QLabel(u"性能监测：")
+        self.usb_r_sum_label = QLabel(u"USBR：")
+        self.usb_r_sum_sedit = QLineEdit(u'0')
+        self.usb_s_sum_label=QLabel(u"USBS：")
+        self.usb_s_sum_redit = QLineEdit(u'0')
+        self.lcd_r_label = QLabel(u"LCD：")
+        self.lcd_r_edit = QLineEdit(u'0')
+        self.tree_r_label = QLabel(u"TREE：")
+        self.tree_r_edit = QLineEdit(u'0')
+ 
+        debug_hbox.addWidget(self.debug_label)
+        debug_hbox.addWidget(self.usb_r_sum_label)
+        debug_hbox.addWidget(self.usb_r_sum_sedit)
+        debug_hbox.addWidget(self.usb_s_sum_label)
+        debug_hbox.addWidget(self.usb_s_sum_redit)
+        debug_hbox.addWidget(self.lcd_r_label)
+        debug_hbox.addWidget(self.lcd_r_edit)
+        debug_hbox.addWidget(self.tree_r_label)
+        debug_hbox.addWidget(self.tree_r_edit)
+
         t_hbox = QHBoxLayout()
         t_hbox.addWidget(self.cmd_label)
         t_hbox.addWidget(self.cmd_lineedit)
@@ -245,10 +267,10 @@ class dtq_hid_debuger(QWidget, hid_event):
 
         self.r_browser = QTextBrowser ()
         self.r_browser.setFixedHeight(160)
-        # self.r_browser.document().setMaximumBlockCount(100)
+        self.r_browser.document().setMaximumBlockCount(100)
         self.s_browser = QTextBrowser ()
         self.s_browser.setFixedHeight(80)
-        # self.s_browser.document().setMaximumBlockCount(100)
+        self.s_browser.document().setMaximumBlockCount(100)
 
         self.tree_com = QTreeWidget()
         self.tree_com.setFont(QFont(u"答题器数据统计", 8, False))
@@ -271,6 +293,7 @@ class dtq_hid_debuger(QWidget, hid_event):
         box.addLayout(q_hbox)
         box.addLayout(s_hbox)
         box.addLayout(f_hbox)
+        box.addLayout(debug_hbox)
         box.addWidget(self.s_browser)
         box.addWidget(self.r_browser)
         box.addWidget(self.tree_com)
@@ -315,8 +338,7 @@ class dtq_hid_debuger(QWidget, hid_event):
         self.usb_rbuf_process = QProcessNoStop(self.usb_cmd_rev_process)
         # 创建 USB 发送数据进程
         self.usb_sbuf_process = QProcessNoStop(self.usb_cmd_snd_process)
-        self.usb_rbuf_process.start()
-        self.usb_sbuf_process.start()
+        
         # custom hid signals
         self.hidConnected.connect( self.on_connected )
 
@@ -325,6 +347,8 @@ class dtq_hid_debuger(QWidget, hid_event):
             my_hid.vendor_id, my_hid.product_id, event_str ))
         if my_hid.vendor_id == JSQ_VID and my_hid.product_id == JSQ_PID:
             if event_str == "connected":
+                self.usb_rbuf_process.start()
+                self.usb_sbuf_process.start()
                 self.hid_device.set_raw_data_handler(self.usb_rev_to_buf)
                 self.report = self.hid_device.find_output_reports()
                 self.alive = True
@@ -333,6 +357,8 @@ class dtq_hid_debuger(QWidget, hid_event):
                 msg = self.dev_pro.get_check_wl_msg()
                 self.usb_snd_store(msg)
             else:
+                self.usb_rbuf_process.quit()
+                self.usb_sbuf_process.quit()
                 self.alive = False
                 self.led.set_color("gray")
 
@@ -348,7 +374,7 @@ class dtq_hid_debuger(QWidget, hid_event):
     def r_lcd_process(self):
         if not self.r_lcd_buf.empty():
             r_msg = self.r_lcd_buf.get()
-            self.r_browser.append(r_msg )
+            self.r_browser.append(r_msg)
 
     def r_lcd_hook(self, msg):
         self.r_lcd_buf.put(msg)
@@ -358,6 +384,12 @@ class dtq_hid_debuger(QWidget, hid_event):
         if not self.s_lcd_buf.empty():
             s_msg = self.s_lcd_buf.get()
             self.s_browser.append(s_msg )
+        else:
+            if self.alive:
+                self.usb_r_sum_sedit.setText(str(self.rcmd_buf.qsize()))
+                self.usb_s_sum_redit.setText(str(self.scmd_buf.qsize()))
+                self.lcd_r_edit.setText(str(self.scmd_buf.qsize()))
+                self.tree_r_edit.setText(str(self.r_tree_buf.qsize()))
 
     # 单击获取设备ID
     def tree_1_clicked(self, item, column):
@@ -433,24 +465,25 @@ class dtq_hid_debuger(QWidget, hid_event):
     * Input       : msg
     '''
     def usb_cmd_snd_process(self):
-        if not self.scmd_buf.empty():
-            msg = self.scmd_buf.get()
-            r_cmd = [0x00]
-            for item in msg:
-                r_cmd.append(item)
-            # 没有满的数据自动补0
-            for item_pos in range(len(r_cmd), self.dev_pro.PAC_LEN):
-                r_cmd.append(0x00)
-            # 发送数据
-            if self.report:
-                self.report[0].set_raw_data(r_cmd)
-                try:
-                    self.report[0].send()
-                except hid.HIDError:
-                    pass
-                    self.s_lcd_buf.put(u"发送数据失败！")
-                r_cmd = u"发送数据：S : {0}".format(r_cmd)
-                logging.debug(r_cmd)
+        if self.alive:
+            if not self.scmd_buf.empty():
+                msg = self.scmd_buf.get()
+                r_cmd = [0x00]
+                for item in msg:
+                    r_cmd.append(item)
+                # 没有满的数据自动补0
+                for item_pos in range(len(r_cmd), self.dev_pro.PAC_LEN):
+                    r_cmd.append(0x00)
+                # 发送数据
+                if self.report:
+                    self.report[0].set_raw_data(r_cmd)
+                    try:
+                        self.report[0].send()
+                    except hid.HIDError:
+                        pass
+                        self.s_lcd_buf.put(u"发送数据失败！")
+                    r_cmd = u"发送数据：S : {0}".format(r_cmd)
+                    logging.debug(r_cmd)
 
     '''
     * Fun Name    : usb_rev_to_buf
