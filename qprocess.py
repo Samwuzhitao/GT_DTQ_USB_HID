@@ -7,8 +7,8 @@
   * @brief   : ptqt 自由进程处理函数：
   *            此类在 QThread 类的基础上创建，直接处于GUI的指令协议解析函数
 """
-from PyQt4.QtCore import *
-from PyQt4.QtGui  import *
+from PySide.QtCore import *
+from PySide.QtGui import *
 
 class QProcessNoStop(QThread):
     def __init__(self, fun, parent=None):

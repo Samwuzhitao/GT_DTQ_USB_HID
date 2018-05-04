@@ -10,8 +10,8 @@ import datetime
 import time
 import os
 import mp3play
-from PyQt4.QtCore import *
-from PyQt4.QtGui  import *
+from PySide.QtCore import *
+from PySide.QtGui import *
 from qprocess import *
 
 class dtq():

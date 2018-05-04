@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 '''
 * File Name   : main.py
@@ -5,16 +6,22 @@
 * Input       : None
 # '''
 import sys
+from PySide.QtCore import *
+from PySide.QtGui import *
+import pywinusb.hid as hid
+import ctypes
 import random
 import Queue
 import UserString
-import pywinusb.hid as hid
 import serial
-from dtq_ht46_dev import *
 from qprocess import *
 from file_transfer import *
-from port_frame import *
 import logging
+from dtq_ht46_dev import *
+from port_frame import *
+
+JSQ_VID = 0x0483
+JSQ_PID = 0x5A4C
 
 # 配置日志输出的方式及格式
 LOG_TIME = time.strftime('%Y%m%d%H', time.localtime(time.time()))
@@ -25,14 +32,69 @@ logging.basicConfig (
     format = u'[%(asctime)s] %(message)s',
 )
 
+class hid_event(hid.HidPnPWindowMixin):
+    hidConnected = Signal(hid.HidDevice, str)
+    def __init__(self):
+        getAsPtr = ctypes.pythonapi.PyCObject_AsVoidPtr
+        getAsPtr.restype = ctypes.c_void_p
+        getAsPtr.argtypes = [ctypes.py_object]
+        window_hnd = getAsPtr(self.winId())
+
+        hid.HidPnPWindowMixin.__init__(self, window_hnd)
+        self.hid_device = None
+        self._hid_target = None
+        self.on_hid_pnp()
+
+    def on_hid_pnp(self, hid_event = None):
+        old_device = self.hid_device
+        if hid_event == "connected":
+            if self.hid_device:
+                pass
+            else:
+                self.test_for_connection()
+        elif hid_event == "disconnected":
+            if self.hid_device and not self.hid_device.is_plugged():
+                self.hid_device = None
+        else:
+            self.test_for_connection()
+        if old_device != self.hid_device:
+            if hid_event == "disconnected":
+                self.hidConnected.emit(old_device, hid_event)
+            else:
+                self.hidConnected.emit(self.hid_device, hid_event)
+
+    def test_for_connection(self):
+        if not self._hid_target:
+            return
+        all_items =  self._hid_target.get_devices()
+        if all_items:
+            if len(all_items) == 1:
+                self.hid_device = all_items[0]
+            else:
+                grouped_items = self._hid_target.get_devices_by_parent()
+                if len(grouped_items) > 1:
+                    pass
+                else:
+                    pass
+                self.hid_device = all_items[0]
+        if self.hid_device:
+            self.hid_device.open()
+
+    def set_target(self, hid_filter):
+        self._hid_target = hid_filter
+        self.test_for_connection()
+        if self.hid_device:
+            self.hidConnected.emit(self.hid_device, "connected")
+
 '''
 * Class Name  : dtq_hid_debuger
 * Description : HID 调试器主类
 * Input       : None
 '''
-class dtq_hid_debuger(QWidget):
+class dtq_hid_debuger(QWidget, hid_event):
     def __init__(self, parent=None):
         super(dtq_hid_debuger, self).__init__(parent)
+        hid_event.__init__(self)
         # 数据缓冲区
         self.rcmd_buf = Queue.Queue()
         self.scmd_buf = Queue.Queue()
@@ -45,18 +107,19 @@ class dtq_hid_debuger(QWidget):
         self.mp3_player_dict = {}
         self.uid_list = {}
         # USB 设备管理
-        self.dev_dict = {}
+        # self.dev_dict = {}
         self.alive = False
         # 答题协议
         self.dev_pro = None
         # 升级协议
         self.dfu_pro = None
 
-        self.setWindowTitle(u"USB HID调试工具v2.0.10")
-        self.com_combo = QComboBox(self)
-        self.com_combo.setFixedSize(170, 20)
-        self.usb_hid_scan()
-        self.usb_bt = QPushButton(u"打开USB设备")
+        self.setWindowTitle(u"USB HID调试工具v2.0.11")
+        self.connect_label = QLabel(u"连接状态:")
+        self.connect_label.setFixedWidth(60)
+        self.led = LED(30)
+        self.led.setFixedWidth(30)
+        self.usb_bt = QPushButton(u"搜索USB设备")
         self.ser_bt = QPushButton(u"搜索DTQ监测设备")
         self.clr_bt = QPushButton(u"清空数据")
         self.pp_test_button = QPushButton(u"开始单选乒乓")
@@ -70,7 +133,8 @@ class dtq_hid_debuger(QWidget):
         self.port_button = QPushButton(u"复位端口")
 
         e_hbox = QHBoxLayout()
-        e_hbox.addWidget(self.com_combo)
+        e_hbox.addWidget(self.connect_label)
+        e_hbox.addWidget(self.led)
         e_hbox.addWidget(self.usb_bt)
         e_hbox.addWidget(self.ser_bt)
         e_hbox.addWidget(self.pp_test_button)
@@ -97,6 +161,7 @@ class dtq_hid_debuger(QWidget):
         self.ctl_label = QLabel(u"状态控制：")
         self.devid_label = QLabel(u"uID：")
         self.devid_lineedit = QLineEdit()
+        self.devid_lineedit.setFixedWidth(70)
         self.led_label = QLabel(u"指示灯：")
         self.led_color_combo = QComboBox(self)
         self.led_color_combo.addItems([u"红:0x01", u"绿:0x02", u"蓝:0x03", u"黄:0x04",u"紫:0x05",u"青:0x06",u"白:0x07"])
@@ -160,6 +225,7 @@ class dtq_hid_debuger(QWidget):
         self.q_label = QLabel(u"答题功能：")
         self.an_devid_label = QLabel(u"uID：")
         self.an_devid_lineedit = QLineEdit()
+        self.an_devid_lineedit.setFixedWidth(70)
         self.q_combo = QComboBox(self)
         self.q_combo.setFixedSize(105, 20)
         self.q_combo.addItems([u"单题单选:0x01", u"是非判断:0x02",
@@ -179,10 +245,10 @@ class dtq_hid_debuger(QWidget):
 
         self.r_browser = QTextBrowser ()
         self.r_browser.setFixedHeight(160)
-        self.r_browser.document().setMaximumBlockCount(100)
+        # self.r_browser.document().setMaximumBlockCount(100)
         self.s_browser = QTextBrowser ()
         self.s_browser.setFixedHeight(80)
-        self.s_browser.document().setMaximumBlockCount(100)
+        # self.s_browser.document().setMaximumBlockCount(100)
 
         self.tree_com = QTreeWidget()
         self.tree_com.setFont(QFont(u"答题器数据统计", 8, False))
@@ -201,8 +267,8 @@ class dtq_hid_debuger(QWidget):
         box.addLayout(e_hbox)
         box.addWidget(self.port_frame)
         box.addLayout(c_hbox)
-        box.addLayout(q_hbox)
         box.addLayout(t_hbox)
+        box.addLayout(q_hbox)
         box.addLayout(s_hbox)
         box.addLayout(f_hbox)
         box.addWidget(self.s_browser)
@@ -249,6 +315,26 @@ class dtq_hid_debuger(QWidget):
         self.usb_rbuf_process = QProcessNoStop(self.usb_cmd_rev_process)
         # 创建 USB 发送数据进程
         self.usb_sbuf_process = QProcessNoStop(self.usb_cmd_snd_process)
+        self.usb_rbuf_process.start()
+        self.usb_sbuf_process.start()
+        # custom hid signals
+        self.hidConnected.connect( self.on_connected )
+
+    def on_connected(self, my_hid, event_str):
+        self.r_lcd_buf.put(u"设备 vId={0:04x}, pId={1:04x}: {2} ！".format(
+            my_hid.vendor_id, my_hid.product_id, event_str ))
+        if my_hid.vendor_id == JSQ_VID and my_hid.product_id == JSQ_PID:
+            if event_str == "connected":
+                self.hid_device.set_raw_data_handler(self.usb_rev_to_buf)
+                self.report = self.hid_device.find_output_reports()
+                self.alive = True
+                self.dev_pro = dtq_xes_ht46(self.r_lcd_hook)
+                self.led.set_color("blue")
+                msg = self.dev_pro.get_check_wl_msg()
+                self.usb_snd_store(msg)
+            else:
+                self.alive = False
+                self.led.set_color("gray")
 
     def r_tree_process(self):
         if not self.r_tree_buf.empty():
@@ -298,7 +384,6 @@ class dtq_hid_debuger(QWidget):
 
     def usb_dfu_process(self):
         if self.alive:
-            # print "CHECK"
             # 发送镜像信息
             if self.dev_pro.dfu_s == 0:
                 self.s_lcd_buf.put(u"S: 开始连接设备...")
@@ -314,7 +399,7 @@ class dtq_hid_debuger(QWidget):
                 self.usb_dfu_timer.start(10)
                 self.dev_pro.dfu_s = 2
 
-            # 切换定时器
+            # 发送镜像数据
             if self.dev_pro.dfu_s == 2:
                 image_data = self.dfu_pro.usb_dfu_stx_pac()
                 if image_data:
@@ -324,50 +409,10 @@ class dtq_hid_debuger(QWidget):
                         self.progressDialog_value = (self.dfu_pro.f_offset * 100) / self.dfu_pro.f_size
                         self.progressDialog.setValue(self.progressDialog_value)
                 else:
-                    self.dev_pro.dfu_s = 3
+                    self.dev_pro.dfu_s = 0
+                    self.s_lcd_buf.put(u"S: 数据传输完成...")
+                    self.usb_dfu_timer.stop()
                 return
-            # 发送镜像数据
-            if self.dev_pro.dfu_s == 3:
-                self.s_lcd_buf.put(u"S: 数据传输完成...")
-                self.alive    = False
-                self.dev_dict = {}
-                self.usb_dfu_timer.stop()
-                self.usb_dfu_timer.start(300)
-                return
-        else:
-            print "SCAN"
-            self.usb_hid_scan()
-            for item in self.dev_dict:
-                base_name = item.split(".")[0]
-                print base_name[:-1]
-                # 扫描 BOOT 设备
-                if self.dev_pro.dfu_s == 0:
-                    if base_name[:-1]== "JSQ_BOOT":
-                        self.dev_dict[item].open()
-                        self.dev_dict[item].set_raw_data_handler(self.usb_rev_to_buf)
-                        self.report = self.dev_dict[item].find_output_reports()
-                        self.alive  = True
-                        self.dev_pro = dtq_xes_ht46(self.r_lcd_hook)
-                        self.usb_rbuf_process.start()
-                        self.usb_sbuf_process.start()
-                        self.s_lcd_buf.put(u"打开设备:[ %s ] 成功！" % item )
-                        self.usb_bt.setText(u"关闭USB设备")
-                # 扫描 JSQ 设备
-                if self.dev_pro.dfu_s == 3:
-                    if base_name[:-1]== "DTQ_JSQ_":
-                        self.dev_dict[item].open()
-                        self.dev_dict[item].set_raw_data_handler(self.usb_rev_to_buf)
-                        self.report = self.dev_dict[item].find_output_reports()
-                        self.alive  = True
-                        self.dev_pro = dtq_xes_ht46(self.r_lcd_hook)
-                        self.usb_rbuf_process.start()
-                        self.usb_sbuf_process.start()
-                        self.s_lcd_buf.put(u"打开设备:[ %s ] 成功！" % item )
-                        msg = self.dev_pro.get_check_wl_msg()
-                        self.usb_snd_store(msg)
-                        self.usb_bt.setText(u"关闭USB设备")
-                        self.dev_pro.dfu_s = 0
-                        self.usb_dfu_timer.stop()
 
     '''
     * Fun Name    : usb_snd_store
@@ -402,12 +447,7 @@ class dtq_hid_debuger(QWidget):
                 try:
                     self.report[0].send()
                 except hid.HIDError:
-                    self.usb_bt.setText(u"打开USB设备")
-                    self.dev_dict = {}
-                    self.alive = False
-                    self.usb_sbuf_process.quit()
-                    self.dev_pro.dfu_s = 3
-                    self.usb_dfu_timer.start(300)
+                    pass
                     self.s_lcd_buf.put(u"发送数据失败！")
                 r_cmd = u"发送数据：S : {0}".format(r_cmd)
                 logging.debug(r_cmd)
@@ -489,34 +529,10 @@ class dtq_hid_debuger(QWidget):
             self.s_browser.clear()
             return
 
-        if button_str == u"打开USB设备":
-            usb_port = str(self.com_combo.currentText())
-            if usb_port:
-                self.dev_dict[usb_port].open()
-                self.dev_dict[usb_port].set_raw_data_handler(self.usb_rev_to_buf)
-                self.report = self.dev_dict[usb_port].find_output_reports()
-                self.alive = True
-                if self.dev_pro == None:
-                    self.dev_pro = dtq_xes_ht46(self.r_lcd_hook)
-                    self.usb_rbuf_process.start()
-                    self.usb_sbuf_process.start()
-                self.s_lcd_buf.put(u"打开设备:[ %s ] 成功！" % usb_port )
-                msg = self.dev_pro.get_check_wl_msg()
-                self.usb_snd_store(msg)
-                self.usb_bt.setText(u"关闭USB设备")
-                return
-
-        if button_str == u"关闭USB设备":
-            usb_port = str(self.com_combo.currentText())
-            self.alive = False
-            if self.dev_dict[usb_port]:
-                self.dev_dict[usb_port].close()
-                self.usb_rbuf_process.quit()
-                self.report = None
-                self.dev_pro = None
-                self.s_lcd_buf.put(u"关闭设备成功！")
-            self.usb_bt.setText(u"打开USB设备")
-            return
+        if button_str == u"搜索USB设备":
+            if self.alive == False:
+                self.s_lcd_buf.put( u"开始查找设备！" )
+                self.set_target(hid.HidDeviceFilter(vendor_id = JSQ_VID, product_id = JSQ_PID))
 
         if button_str == u"发送题目":
             devid_str = str(self.an_devid_lineedit.text())
@@ -622,15 +638,15 @@ class dtq_hid_debuger(QWidget):
             return
         
         if button_str == u"添加固件":
-            image_path = unicode(QFileDialog.getOpenFileName(self, 'Open file', './', "bin files(*.bin)"))
-            if len(image_path) > 0:
-                self.fm_lineedit.setText(image_path)
+            image_path = unicode(QFileDialog.getOpenFileName(self, u'添加固件', './', u"bin 文件(*.bin)"))
+            file_path = unicode(image_path.split("'")[1])
+            if len(file_path) > 0:
+                self.fm_lineedit.setText(file_path)
             return
 
         if button_str == u"升级程序":
             image_path = unicode(self.fm_lineedit.text())
             if len(image_path) > 0:
-                # print image_path
                 self.dev_pro.dfu_s = 0
                 self.dfu_pro = file_transfer(image_path, self.dev_pro.PAC_LEN - 21)
                 self.usb_dfu_timer.start(300)
@@ -652,18 +668,6 @@ class dtq_hid_debuger(QWidget):
                 r_cmd_str += "[ %s ]" % self.port_frame.port_name_dict[item]
             self.r_lcd_buf.put(r_cmd_str)
             return
-
-    def usb_hid_scan(self):
-        usb_list = hid.find_all_hid_devices()
-        if usb_list  :
-            for device in usb_list:
-                device_name = unicode("{0.product_name}").format(device)
-                if device_name[0:3] == "DTQ" or device_name[0:3] == "JSQ":
-                    serial_number = unicode("{0.serial_number}").format(device)
-                    cur_usb_name = device_name+"_"+serial_number
-                    if  cur_usb_name not in self.dev_dict:
-                        self.com_combo.addItem(device_name+"_"+serial_number)
-                        self.dev_dict[device_name+"_"+serial_number] = device
 
     def get_rand_gp2312(self):
         head = random.randint(0xb0, 0xf7)

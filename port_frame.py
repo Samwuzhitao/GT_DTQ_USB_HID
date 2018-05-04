@@ -11,9 +11,9 @@ import os
 import sys
 import logging
 import json
-from PyQt4.QtCore import *
-from PyQt4.QtGui  import *
-from led          import *
+from PySide.QtCore import *
+from PySide.QtGui import *
+from led import *
 from dtq_monitor_dev import *
 from dtq_ht46_dev  import *
 from com_monitor  import *
@@ -54,18 +54,18 @@ class port_frame(QFrame):
         self.led_list.append(self.led4)
 
         c_gbox = QHBoxLayout()
-        c_gbox.addWidget(self.led1      )
+        c_gbox.addWidget(self.led1)
         c_gbox.addWidget(self.led1_combo)
-        c_gbox.addWidget(self.led1_bt   )
-        c_gbox.addWidget(self.led2      )
+        c_gbox.addWidget(self.led1_bt)
+        c_gbox.addWidget(self.led2)
         c_gbox.addWidget(self.led2_combo)
-        c_gbox.addWidget(self.led2_bt   )
-        c_gbox.addWidget(self.led3      )
+        c_gbox.addWidget(self.led2_bt)
+        c_gbox.addWidget(self.led3)
         c_gbox.addWidget(self.led3_combo)
-        c_gbox.addWidget(self.led3_bt   )
-        c_gbox.addWidget(self.led4      )
+        c_gbox.addWidget(self.led3_bt)
+        c_gbox.addWidget(self.led4)
         c_gbox.addWidget(self.led4_combo)
-        c_gbox.addWidget(self.led4_bt   )
+        c_gbox.addWidget(self.led4_bt)
 
         self.led_combo_dict[0] = self.led1_combo
         self.led_combo_dict[1] = self.led2_combo

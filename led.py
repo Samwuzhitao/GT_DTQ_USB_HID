@@ -4,8 +4,8 @@ Created on Sat Apr 22 10:59:35 2017
 
 @author: john
 """
-from PyQt4.QtCore import *
-from PyQt4.QtGui  import *
+from PySide.QtCore import *
+from PySide.QtGui  import *
 
 class LED(QLabel):
     def __init__(self,x,parent=None):

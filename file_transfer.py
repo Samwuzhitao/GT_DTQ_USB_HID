@@ -21,9 +21,9 @@ class file_transfer():
             self.file_path = file_path
             self.file_name = os.path.basename(file_path)
             self.f_size = int(os.path.getsize(file_path))
-            print "File Name: %s " % self.file_name
-            print "File Size: %d " % self.f_size
-            print "pack Size: %d " % self.pac_size
+            # print "File Name: %s " % self.file_name
+            # print "File Size: %d " % self.f_size
+            # print "pack Size: %d " % self.pac_size
 
     def usb_dfu_soh_pac(self):
         NOP = 0
@@ -55,7 +55,7 @@ class file_transfer():
                     pac_len = self.f_size-self.f_offset
                 r_data = f.read( pac_len )
                 f.close()
-                print " f_offset = %5d , sum = %5d, len = %d " % (self.f_offset, self.f_size, pac_len)
+                # print " f_offset = %5d , sum = %5d, len = %d " % (self.f_offset, self.f_size, pac_len)
             # 封装数据
             if r_data:
                 image_data = []

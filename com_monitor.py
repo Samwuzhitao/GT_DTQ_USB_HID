@@ -6,8 +6,8 @@ Created on Sat Apr 22 10:59:35 2017
 """
 import serial
 import string
-from PyQt4.QtCore import *
-from PyQt4.QtGui  import *
+from PySide.QtCore import *
+from PySide.QtGui  import *
 from dtq_monitor_dev import *
 
 class ComMonitor(QThread):
