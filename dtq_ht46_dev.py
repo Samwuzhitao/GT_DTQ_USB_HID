@@ -14,7 +14,7 @@ from PySide.QtCore import *
 from PySide.QtGui import *
 from qprocess import *
 
-class dtq():
+class dtq_tcb():
     def __init__(self, devid):
         # 语音数据管理
         self.devid = devid    # 设备ID
@@ -29,6 +29,7 @@ class dtq():
         self.msg_str = ""
         self.format_err = ""
         self.cntsize = 0
+        self.rev_state = 0
         # 通用数据管理
         self.rev_seq = 0
         self.send_seq = 0
@@ -37,7 +38,6 @@ class dtq():
         self.card_cnt = 0
         self.power_cnt = 0
         self.answer_cnt = 0
-        self.voice_flg = 0
 
     # 答题器包号管理
     def seq_add(self):
@@ -58,8 +58,7 @@ class dtq():
 
     # 打印提示信息
     def decode_porcess(self, r_lcd, voice_info, vocie_msg):
-        self.voice_flg = voice_info["FLG"]
-        if voice_info["FLG"] == 0 and voice_info["POS"] == 1:
+        if voice_info["FLG"] == 0 and voice_info["POS"] == 1 and self.rev_state == 0:
             voice_time = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
             self.f_name = "VOICE_%010u_%s.mp3" % (self.devid, voice_time)
             msg_str = u"[ %010u ]:录音开始 :%s！" % (self.devid, self.f_name)
@@ -77,11 +76,15 @@ class dtq():
             if self.mp3_format_check(vocie_msg) == False:
                 self.format_err += "[ %3d ]" %  voice_info["POS"]
             self.cntsize = len(wr_data)
+            self.rev_state = 1
         else:
-            if self.f_handle:
+            if self.rev_state == 1:
                 if voice_info["POS"] == (self.curpos+1):
                     self.pac_cnt = self.pac_cnt + 1
                     wr_data = bytearray(vocie_msg)
+                    if not self.f_handle:
+                        self.f_path = os.path.abspath("./") + '/VOICE/%s' % (self.f_name)
+                        self.f_handle = open(self.f_path, 'wb')
                     self.f_handle.write(wr_data)
                     self.cntsize += len(wr_data)
                     if self.mp3_format_check(vocie_msg) == False:
@@ -89,18 +92,19 @@ class dtq():
                 else:
                     for item in range(self.curpos, voice_info["POS"]):
                         self.msg_str += "[ %3d ]" % item
-                if voice_info["FLG"] == 1:
-                    self.stop_pos = voice_info["POS"]
-                    # 解码
-                    self.f_handle.close()
-                    msg_str = u"[ %010u ]:数据记录 文件大小: [ %d ], 发送数据包: [ %d ], 接收数据包: [ %d ]！\r\n" % \
-                        (self.devid, self.cntsize, self.stop_pos+1-self.start_pos, self.pac_cnt)
-                    self.msg_str += msg_str + u"丢包统计：\r\n"
-                    self.msg_str += u"错帧统计：\r\n"
-                    self.msg_str += self.format_err
-                    r_lcd(self.msg_str)
-                else:
-                    self.curpos = voice_info["POS"]
+            if voice_info["FLG"] == 1:
+                self.stop_pos = voice_info["POS"]
+                # 解码
+                self.f_handle.close()
+                self.rev_state = 0
+                msg_str = u"[ %010u ]:数据记录 文件大小: [ %d ], 发送数据包: [ %d ], 接收数据包: [ %d ]！\r\n" % \
+                    (self.devid, self.cntsize, self.stop_pos+1-self.start_pos, self.pac_cnt)
+                self.msg_str = msg_str + u"丢包统计：\r\n" + self.msg_str + "\r\n"
+                self.msg_str += u"错帧统计：\r\n"
+                self.msg_str += self.format_err + "\r\n"
+                r_lcd(self.msg_str)
+            else:
+                self.curpos = voice_info["POS"]
 
 class dtq_xes_ht46():
     def __init__(self, r_lcd_hook, usb_snd_hook):
@@ -131,22 +135,7 @@ class dtq_xes_ht46():
             "BIND_STOP": 0x17,
             "POWER":0x18,
             "RESET_PORT": 0x20,
-            "CHECK_WL": 0x21}
-        self.decode_cmds_name = {
-            0x81: "ANSWER_INFO",
-            0x02: "ANSWER",
-            0x03: "VOICE",
-            0x16: "CARD_ID",
-            0x84: "ECHO_IFNO",
-            0x85: "CTL_INFO",
-            0x91: "SET_RFCH",
-            0x93: "DEVICE_INFO",
-            0x94: "CLEAR_SET",
-            0x95: "BIND_START",
-            0x97: "BIND_STOP",
-            0xA8: "RESET_PORT",
-            0xA1: "CHECK_WL",
-            0xB0: "DFU_INFO"
+            "CHECK_WL": 0x21
         }
         self.decode_cmds = {
             0x81: self.answer_info_err,
@@ -163,7 +152,8 @@ class dtq_xes_ht46():
             0x95: self.bind_start_err,
             0x97: self.bind_stop_err,
             0xA1: self.dev_wl_msg_update,
-            0xB0: self.dfu_info_err
+            0xB0: self.dfu_info_err,
+            0xB1: self.dfu_data_err
         }
 
     '''
@@ -251,7 +241,7 @@ class dtq_xes_ht46():
     # 添加白名单
     def get_dtq(self, devid):
         if devid not in self.dtqdict:
-            self.dtqdict[devid] = dtq(devid)
+            self.dtqdict[devid] = dtq_tcb(devid)
             self.dtqdict[devid].upos = len(self.dtqdict)
         return self.dtqdict[devid]
 
@@ -428,6 +418,9 @@ class dtq_xes_ht46():
         self.r_lcd(u"R: 建立连接成功...")
         self.dfu_s = 1
 
+    def dfu_data_err(self, uid_dict, dtq, msg):
+        pass
+
     # 下发复位端口指令
     def get_reset_port_msg(self, port):
         cof_msg = [0x00, 0x00, 0x00, 0x00]
@@ -576,7 +569,6 @@ class dtq_xes_ht46():
         cur_msg  = u"[ %s ]: %7d " % (tree_dict["CMD"][0:2], tree_dict[tree_dict["CMD"]])
         s_msg = self.get_echo_cmd_msg(tree_dict["UID"], cur_msg)
         self.usb_snd(s_msg)
-
         return tree_dict
 
     def power_state_update(self, uid_dict, dtq, msg):
@@ -632,11 +624,9 @@ class dtq_xes_ht46():
         rpos = 0
         while rpos < 40: 
             uid = self.uid_neg_code(port1_uid[rpos: rpos+4])
-            if uid:
-                # dtq = self.get_dtq(uid)
-                if uid not in uid_dict["uid_list"]:
-                    uid_dict["uid_list"].append(uid)
-                    str_msg += " [ %010u ]" % uid
+            if uid and uid not in uid_dict["uid_list"]:
+                uid_dict["uid_list"].append(uid)
+                str_msg += " [ %010u ]" % uid
             rpos = rpos + 4
         str_msg += "\r\n"
         return str_msg
@@ -676,10 +666,10 @@ class dtq_xes_ht46():
                 tree_dict = self.decode_cmds[r_cmd](uid_dict, dtq, msg[rpos: rpos+r_len])
                 return tree_dict
             else:
-                str_msg = "R: UNKONW CMD!"
-                for item in msg:
-                    str_msg += " %02X" % item
-                self.r_lcd(str_msg)
+                # str_msg = "R: UNKONW CMD!"
+                # for item in msg:
+                #     str_msg += " %02X" % item
+                # self.r_lcd(str_msg)
                 return
 
 if __name__=='__main__':

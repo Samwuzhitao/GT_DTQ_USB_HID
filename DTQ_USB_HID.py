@@ -33,7 +33,7 @@ logging.basicConfig (
     format = u'[%(asctime)s] %(message)s',
 )
 
-class hid_event(hid.HidPnPWindowMixin):
+class hid_pnp_event(hid.HidPnPWindowMixin):
     hidConnected = Signal(hid.HidDevice, str)
     def __init__(self):
         getAsPtr = ctypes.pythonapi.PyCObject_AsVoidPtr
@@ -46,23 +46,23 @@ class hid_event(hid.HidPnPWindowMixin):
         self._hid_target = None
         self.on_hid_pnp()
 
-    def on_hid_pnp(self, hid_event = None):
+    def on_hid_pnp(self, hid_pnp_event = None):
         old_device = self.hid_device
-        if hid_event == "connected":
+        if hid_pnp_event == "connected":
             if self.hid_device:
                 pass
             else:
                 self.test_for_connection()
-        elif hid_event == "disconnected":
+        elif hid_pnp_event == "disconnected":
             if self.hid_device and not self.hid_device.is_plugged():
                 self.hid_device = None
         else:
             self.test_for_connection()
         if old_device != self.hid_device:
-            if hid_event == "disconnected":
-                self.hidConnected.emit(old_device, hid_event)
+            if hid_pnp_event == "disconnected":
+                self.hidConnected.emit(old_device, hid_pnp_event)
             else:
-                self.hidConnected.emit(self.hid_device, hid_event)
+                self.hidConnected.emit(self.hid_device, hid_pnp_event)
 
     def test_for_connection(self):
         if not self._hid_target:
@@ -92,10 +92,10 @@ class hid_event(hid.HidPnPWindowMixin):
 * Description : HID 调试器主类
 * Input       : None
 '''
-class dtq_hid_debuger(QWidget, hid_event):
+class dtq_hid_debuger(QWidget, hid_pnp_event):
     def __init__(self, parent=None):
         super(dtq_hid_debuger, self).__init__(parent)
-        hid_event.__init__(self)
+        hid_pnp_event.__init__(self)
         # 数据缓冲区
         self.rcmd_buf = Queue.Queue()
         self.scmd_buf = Queue.Queue()
@@ -127,8 +127,8 @@ class dtq_hid_debuger(QWidget, hid_event):
         self.clear_conf_button = QPushButton(u"清除配置")
         self.check_wl_button = QPushButton(u"查看白名单")
         self.port_combo = QComboBox(self)
-        self.port_combo.addItems([u"PORT0:0x00", u"PORT1:0x01",
-            u"PORT2:0x02", u"PORT3:0x03", u"PORT4:0x04"])
+        self.port_combo.addItems([u"PORT:0", u"PORT:1",
+            u"PORT:2", u"PORT:3", u"PORT:4"])
         self.port_button = QPushButton(u"复位端口")
 
         e_hbox = QHBoxLayout()
@@ -320,18 +320,16 @@ class dtq_hid_debuger(QWidget, hid_event):
         # GUI 数据处理进程
         self.r_lcd_timer = QTimer()
         self.r_lcd_timer.timeout.connect(self.r_lcd_process)
-        self.r_lcd_timer.start(10)
+        self.r_lcd_timer.start(1)
         self.s_lcd_timer = QTimer()
         self.s_lcd_timer.timeout.connect(self.s_lcd_process)
         self.s_lcd_timer.start(10)
         self.r_tree_timer = QTimer()
         self.r_tree_timer.timeout.connect(self.update_tree_process)
-        self.r_tree_timer.start(500)
-        # 创建 USB 数据解析进程
+        self.r_tree_timer.start(300)
+        # 创建 USB 数据解析进程，USB 发送数据进程
         self.usb_rbuf_process = QProcessNoStop(self.usb_cmd_rev_process)
-        # 创建 USB 发送数据进程
         self.usb_sbuf_process = QProcessNoStop(self.usb_cmd_snd_process)
-        # custom hid signals
         self.hidConnected.connect( self.on_connected )
 
     def on_connected(self, my_hid, event_str):
@@ -367,7 +365,6 @@ class dtq_hid_debuger(QWidget, hid_event):
                     self.qtree_dict[uid].setText(7, str(tmp_uid.card_cnt))
                     self.qtree_dict[uid].setText(8, str(tmp_uid.power_cnt))
                     self.qtree_dict[uid].setText(9, str(tmp_uid.pac_cnt))
-                    self.qtree_dict[uid].setText(10, str(tmp_uid.voice_flg))
             # 刷新统计信息
             self.sum_sedit.setText(str(self.dev_pro.sum_scnt))
             self.sum_redit.setText(str(self.dev_pro.sum_rcnt))
@@ -375,9 +372,14 @@ class dtq_hid_debuger(QWidget, hid_event):
 
     # 数据显示进程
     def r_lcd_process(self):
-       if not self.r_lcd_buf.empty():
+        if not self.r_lcd_buf.empty():
+            self.r_lcd_timer.stop()
             r_msg = self.r_lcd_buf.get()
             self.r_browser.append(r_msg)
+            self.r_lcd_timer.start()
+        else:
+            self.r_lcd_timer.stop()
+            self.r_lcd_timer.start(10)
 
     def r_lcd_hook(self, msg):
         self.r_lcd_buf.put(msg)
@@ -524,30 +526,26 @@ class dtq_hid_debuger(QWidget, hid_event):
         button = self.sender()
         if button is None or not isinstance(button, QPushButton):
             return
-
         button_str = button.text()
-        if button_str == u"开始单选乒乓":
-            s_msg = self.dev_pro.get_echo_cmd_msg(0x11223344, "cur_msg")
-            self.usb_snd_hook(s_msg)
 
-        if button_str == u"清空数据":
-            self.r_browser.clear()
-            self.s_browser.clear()
-            return
+        if self.alive:
+            if button_str == u"开始单选乒乓":
+                s_msg = self.dev_pro.get_echo_cmd_msg(0x11223344, "cur_msg")
+                self.usb_snd_hook(s_msg)
+                return
 
-        if button_str == u"搜索USB设备":
-            if self.alive == False:
-                self.s_lcd_buf.put( u"开始查找设备！" )
-                self.set_target(hid.HidDeviceFilter(vendor_id = JSQ_VID, product_id = JSQ_PID))
+            if button_str == u"清空数据":
+                self.r_browser.clear()
+                self.s_browser.clear()
+                return
 
-        if button_str == u"发送题目":
-            devid_str = str(self.an_devid_lineedit.text())
-            if devid_str:
-                devid = int(str(self.an_devid_lineedit.text()))
-            else:
-                devid = 0
-            q_type =  unicode(self.q_combo.currentText())
-            if self.alive:
+            if button_str == u"发送题目":
+                devid_str = str(self.an_devid_lineedit.text())
+                if devid_str:
+                    devid = int(str(self.an_devid_lineedit.text()))
+                else:
+                    devid = 0
+                q_type =  unicode(self.q_combo.currentText())
                 que_t = int(q_type.split(":")[1][2:])
                 que_t = (que_t / 10)*16 +  que_t % 10
                 # print que_t
@@ -555,73 +553,64 @@ class dtq_hid_debuger(QWidget, hid_event):
                 msg = self.dev_pro.get_question_cmd_msg( devid, que_t, cur_msg )
                 self.usb_snd_hook( msg )
                 self.s_lcd_buf.put(u"S: 发送题目 : %s : %s " % ( q_type, cur_msg ))
-            return
+                return
 
-        if button_str == u"发送数据":
-            i = 0
-            msg = unicode(self.cmd_lineedit.text())
-            msg_str = u"S: 发送回显 : %s, UID：" % msg
-            if "uid_list" in self.uid_list:
-                for item in self.uid_list["uid_list"]:
-                    cur_msg = u"[ %d ] %s" % (i, msg)
-                    i = i + 1
-                    s_msg = self.dev_pro.get_echo_cmd_msg(item, cur_msg)
-                    self.usb_snd_hook(s_msg)
-                    msg_str = msg_str + " [ %10u ]" % item
-                self.s_lcd_buf.put(msg_str)
-            else:
-                self.s_lcd_buf.put(u"白名单为空,请刷卡！")
-            return
+            if button_str == u"发送数据":
+                i = 0
+                msg = unicode(self.cmd_lineedit.text())
+                msg_str = u"S: 发送回显 : %s, UID：" % msg
+                if "uid_list" in self.uid_list:
+                    for item in self.uid_list["uid_list"]:
+                        cur_msg = u"[ %d ] %s" % (i, msg)
+                        i = i + 1
+                        s_msg = self.dev_pro.get_echo_cmd_msg(item, cur_msg)
+                        self.usb_snd_hook(s_msg)
+                        msg_str = msg_str + " [ %10u ]" % item
+                    self.s_lcd_buf.put(msg_str)
+                return
 
-        if button_str == u"查看配置":
-            if self.alive:
+            if button_str == u"查看配置":
                 msg = self.dev_pro.get_check_dev_info_msg()
                 self.usb_snd_hook(msg)
                 self.s_lcd_buf.put(u"S: 查看设备信息 ")
-            return
+                return
 
-        if button_str == u"复位端口":
-            if self.alive:
+            if button_str == u"复位端口":
                 port_type =  unicode(self.port_combo.currentText())
-                port = int(port_type.split(":")[1][2:]) 
+                port = int(port_type.split(":")[1]) 
                 msg = self.dev_pro.get_reset_port_msg(port)
                 self.usb_snd_hook(msg)
                 self.s_lcd_buf.put(u"S: 复位端口 ")
-            return
+                return
 
-        if button_str == u"修改信道":
-            if self.alive:
+            if button_str == u"修改信道":
                 ch = int(str(self.ch_lineedit.text()))
                 msg = self.dev_pro.get_set_rf_ch_msg(ch)
                 self.usb_snd_hook(msg)
                 self.s_lcd_buf.put(u"S: 修改信道 ")
-            return
+                return
 
-        if button_str == u"停止绑定":
-            if self.alive:
+            if button_str == u"停止绑定":
                 msg = self.dev_pro.get_bind_stop_msg()
                 self.usb_snd_hook(msg)
                 self.bind_button.setText(u"开始绑定")
                 self.s_lcd_buf.put(u"S: 停止绑定: 绑定结束！此时刷卡无效")
-            return
+                return
 
-        if button_str == u"开始绑定":
-            if self.alive:
+            if button_str == u"开始绑定":
                 msg = self.dev_pro.get_bind_start_msg()
                 self.usb_snd_hook(msg)
                 self.bind_button.setText(u"停止绑定")
                 self.s_lcd_buf.put(u"S: 开始绑定: 绑定开始！请将需要测试的答题器刷卡绑定！")
-            return
+                return
 
-        if button_str == u"清除配置":
-            if self.alive:
+            if button_str == u"清除配置":
                 msg = self.dev_pro.get_clear_dev_info_msg()
                 self.usb_snd_hook(msg)
                 self.s_lcd_buf.put(u"S: 清除配置: ")
-            return
-        
-        if button_str == u"同步状态":
-            if self.alive:
+                return
+
+            if button_str == u"同步状态":
                 devid = int(str(self.devid_lineedit.text()))
                 led_cn_str = unicode(self.led_combo.currentText())
                 led_cn = int(led_cn_str.split(":")[1][2:]) 
@@ -634,46 +623,49 @@ class dtq_hid_debuger(QWidget, hid_event):
                 msg = self.dev_pro.get_dtq_ctl_msg(devid, led_cn, led_c, beep_cn, motor_cn)
                 self.usb_snd_hook(msg)
                 self.s_lcd_buf.put(u"S: 同步状态: UID：[ %10u ]" % devid)
-            return
+                return
 
-        if button_str == u"查看白名单":
-            if self.alive:
+            if button_str == u"查看白名单":
                 msg = self.dev_pro.get_check_wl_msg()
                 self.usb_snd_hook(msg)
                 self.s_lcd_buf.put(u"S: 查看白名单:")
-            return
-        
-        if button_str == u"添加固件":
-            image_path = unicode(QFileDialog.getOpenFileName(self, u'添加固件', './', u"bin 文件(*.bin)"))
-            file_path = unicode(image_path.split("'")[1])
-            if len(file_path) > 0:
-                self.fm_lineedit.setText(file_path)
-            return
+                return
 
-        if button_str == u"升级程序":
-            image_path = unicode(self.fm_lineedit.text())
-            if len(image_path) > 0:
-                self.dev_pro.dfu_s = 0
-                self.dfu_pro = file_transfer(image_path, self.dev_pro.PAC_LEN - 21)
-                self.usb_dfu_timer.start(300)
-                self.progressDialog = QProgressDialog(self)
-                self.progressDialog.setWindowModality(Qt.WindowModal)
-                self.progressDialog.setMinimumDuration(5)
-                self.progressDialog.setWindowTitle(u"请等待")
-                self.progressDialog.setLabelText(u"下载中...")
-                self.progressDialog.setCancelButtonText(u"取消")
-                self.progressDialog.setRange(0,100)
-            return
+            if button_str == u"添加固件":
+                image_path = unicode(QFileDialog.getOpenFileName(self, u'添加固件', './', u"bin 文件(*.bin)"))
+                file_path = unicode(image_path.split("'")[1])
+                if len(file_path) > 0:
+                    self.fm_lineedit.setText(file_path)
+                return
 
-        if button_str == u"搜索DTQ监测设备":
-            self.s_lcd_buf.put(u"S: 搜索DTQ监测设备 ")
-            self.port_frame.port_name_dict = {}
-            self.port_frame.uart_scan()
-            r_cmd_str = u"R: 搜索监测端口:"
-            for item in self.port_frame.port_name_dict:
-                r_cmd_str += "[ %s ]" % self.port_frame.port_name_dict[item]
-            self.r_lcd_buf.put(r_cmd_str)
-            return
+            if button_str == u"升级程序":
+                image_path = unicode(self.fm_lineedit.text())
+                if len(image_path) > 0:
+                    self.dev_pro.dfu_s = 0
+                    self.dfu_pro = file_transfer(image_path, self.dev_pro.PAC_LEN - 21)
+                    self.progressDialog = QProgressDialog(self)
+                    self.progressDialog.setWindowModality(Qt.WindowModal)
+                    self.progressDialog.setMinimumDuration(5)
+                    self.progressDialog.setWindowTitle(u"请等待")
+                    self.progressDialog.setLabelText(u"下载中...")
+                    self.progressDialog.setCancelButtonText(u"取消")
+                    self.progressDialog.setRange(0,100)
+                    self.usb_dfu_timer.start(300)
+                return
+
+            if button_str == u"搜索DTQ监测设备":
+                self.s_lcd_buf.put(u"S: 搜索DTQ监测设备 ")
+                self.port_frame.port_name_dict = {}
+                self.port_frame.uart_scan()
+                r_cmd_str = u"R: 搜索监测端口:"
+                for item in self.port_frame.port_name_dict:
+                    r_cmd_str += "[ %s ]" % self.port_frame.port_name_dict[item]
+                self.r_lcd_buf.put(r_cmd_str)
+                return
+        else:
+            if button_str == u"搜索USB设备":
+                self.s_lcd_buf.put( u"开始查找设备！" )
+                self.set_target(hid.HidDeviceFilter(vendor_id = JSQ_VID, product_id = JSQ_PID))
 
     def get_rand_gp2312(self):
         head = random.randint(0xb0, 0xf7)
