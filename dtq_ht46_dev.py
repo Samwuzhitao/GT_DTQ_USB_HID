@@ -18,10 +18,10 @@ class dtq():
     def __init__(self, devid):
         # 语音数据管理
         self.devid = devid    # 设备ID
+        self.upos = 0
         self.voice_dict = {}  # 语音数据缓冲区
         self.start_pos = 0    # 起始包包号
         self.stop_pos = 0     # 结束包包号
-        self.pac_cnt = 0      # 语音数据包计数器
         self.f_name = None    # MP3 文件名
         self.f_path = None    # MP3 文件存放路径
         self.player = None    # MP3 播放器实例
@@ -30,9 +30,11 @@ class dtq():
         self.rev_seq = 0
         self.send_seq = 0
         # 统计计数
+        self.pac_cnt = 0      # 语音数据包计数器
         self.card_cnt = 0
         self.power_cnt = 0
         self.answer_cnt = 0
+        self.voice_flg = 0
 
     # 答题器包号管理
     def seq_add(self):
@@ -122,6 +124,7 @@ class dtq():
 
     # 打印提示信息
     def decode_porcess(self, r_lcd, voice_info, vocie_msg):
+        self.voice_flg = voice_info["FLG"]
         if voice_info["FLG"] == 0 and voice_info["POS"] == 1:
             voice_time = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
             self.f_name = "VOICE_%010u_%s.mp3" % (self.devid, voice_time)
@@ -143,10 +146,15 @@ class dtq():
                 self.decode(r_lcd)
 
 class dtq_xes_ht46():
-    def __init__(self, r_lcd_hook):
+    def __init__(self, r_lcd_hook, usb_snd_hook):
         self.PAC_LEN = 257
         self.r_lcd = r_lcd_hook
-        # self.usb_snd = usb_snd
+        self.usb_snd = usb_snd_hook
+        # 统计计算
+        self.sum_rcnt = 0
+        self.sum_scnt = 0
+        self.lost_rate = 100
+
         self.dtqdict = {}
         self.jsq_uid = None
         self.jsq_seq = 0
@@ -287,6 +295,7 @@ class dtq_xes_ht46():
     def get_dtq(self, devid):
         if devid not in self.dtqdict:
             self.dtqdict[devid] = dtq(devid)
+            self.dtqdict[devid].upos = len(self.dtqdict)
         return self.dtqdict[devid]
 
     '''
@@ -539,6 +548,21 @@ class dtq_xes_ht46():
             else:
                 uid_dict["cnt_r"][dtq.devid] = dtq.answer_cnt
                 uid_dict["cnt_s1"][dtq.devid] = cnt_start - uid_dict["cnt_s0"][dtq.devid]
+        # 返回回显
+        self.sum_rcnt = 0
+        self.sum_scnt = 0
+        self.lost_rate = 100
+        if  "cnt_r" in uid_dict:
+            for item in uid_dict["cnt_r"]:
+                self.sum_rcnt = self.sum_rcnt + uid_dict["cnt_r"][item]
+                self.sum_scnt = self.sum_scnt + uid_dict["cnt_s1"][item]
+            self.lost_rate = self.sum_rcnt*100.0/self.sum_scnt
+        cur_msg  = u"[ %s ]: %7d " % (tree_dict["CMD"][0:2], tree_dict[tree_dict["CMD"]])
+        cur_msg += " "*16
+        cur_msg += u"[ RA ]: %3.3f" % (self.lost_rate)
+        s_msg = self.get_echo_cmd_msg(tree_dict["UID"], cur_msg)
+        self.usb_snd(s_msg)
+
         return tree_dict
 
     # 上报语音格式解析
@@ -574,7 +598,7 @@ class dtq_xes_ht46():
         rpos = 0
         tree_dict = {}
         uid = self.uid_neg_code(msg[rpos:rpos+4])
-        devid = self.uid_pos_code(msg[rpos:rpos+4])
+        # devid = self.uid_pos_code(msg[rpos:rpos+4])
         rpos = rpos + 4
         rep_uid = self.uid_neg_code(msg[rpos:rpos+4])
         # 返回处理结果
@@ -586,11 +610,16 @@ class dtq_xes_ht46():
         else:
             uid_dict["uid_list"] = []
             uid_dict["uid_list"].append(uid)
-        cur_dtq = self.get_dtq(devid)
+        cur_dtq = self.get_dtq(uid)
         cur_dtq.card_cnt = cur_dtq.card_cnt + 1
         tree_dict["UID"] = uid
         tree_dict["CARD_ID"] = cur_dtq.card_cnt
         tree_dict["CMD"] = "CARD_ID"
+        # 返回回显
+        cur_msg  = u"[ %s ]: %7d " % (tree_dict["CMD"][0:2], tree_dict[tree_dict["CMD"]])
+        s_msg = self.get_echo_cmd_msg(tree_dict["UID"], cur_msg)
+        self.usb_snd(s_msg)
+
         return tree_dict
 
     def power_state_update(self, uid_dict, dtq, msg):
@@ -647,6 +676,7 @@ class dtq_xes_ht46():
         while rpos < 40: 
             uid = self.uid_neg_code(port1_uid[rpos: rpos+4])
             if uid:
+                # dtq = self.get_dtq(uid)
                 if uid not in uid_dict["uid_list"]:
                     uid_dict["uid_list"].append(uid)
                     str_msg += " [ %010u ]" % uid
