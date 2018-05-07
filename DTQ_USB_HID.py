@@ -105,7 +105,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         self.qtree_dict = {}
         self.dtq_cnt_dict = {}
         self.mp3_player_dict = {}
-        self.uid_list = {}
+        self.jsq_tcb = {}
         # USB 设备管理
         self.alive = False
         # 答题协议
@@ -122,15 +122,6 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         self.ser_bt = QPushButton(u"搜索DTQ监测设备")
         self.clr_bt = QPushButton(u"清空数据")
         self.pp_test_button = QPushButton(u"开始单选乒乓")
-        self.bind_button = QPushButton(u"开始绑定")
-        self.check_conf_button = QPushButton(u"查看配置")
-        self.clear_conf_button = QPushButton(u"清除配置")
-        self.check_wl_button = QPushButton(u"查看白名单")
-        self.port_combo = QComboBox(self)
-        self.port_combo.addItems([u"PORT:0", u"PORT:1",
-            u"PORT:2", u"PORT:3", u"PORT:4"])
-        self.port_button = QPushButton(u"复位端口")
-
         e_hbox = QHBoxLayout()
         e_hbox.addWidget(self.connect_label)
         e_hbox.addWidget(self.led)
@@ -139,13 +130,18 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         e_hbox.addWidget(self.pp_test_button)
         e_hbox.addWidget(self.clr_bt)
 
-        c_hbox = QHBoxLayout()
         self.ch_label = QLabel(u"设置信道：")
         self.ch_lineedit = QLineEdit(u'1')
         self.ch_button = QPushButton(u"修改信道")
-        self.cmd_label = QLabel(u"回显功能：")
-        self.cmd_lineedit = QLineEdit(u'恭喜你！答对了')
-        self.change_button = QPushButton(u"发送数据")
+        self.bind_button = QPushButton(u"开始绑定")
+        self.check_conf_button = QPushButton(u"查看配置")
+        self.clear_conf_button = QPushButton(u"清除配置")
+        self.check_wl_button = QPushButton(u"查看白名单")
+        self.port_combo = QComboBox(self)
+        self.port_combo.addItems([u"PORT:0", u"PORT:1",
+            u"PORT:2", u"PORT:3", u"PORT:4"])
+        self.port_button = QPushButton(u"复位端口")
+        c_hbox = QHBoxLayout()
         c_hbox.addWidget(self.ch_label)
         c_hbox.addWidget(self.ch_lineedit)
         c_hbox.addWidget(self.ch_button)
@@ -233,8 +229,16 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         debug_hbox.addWidget(self.lcd_r_label)
         debug_hbox.addWidget(self.lcd_r_edit)
 
+        self.cmd_label = QLabel(u"回显功能：")
+        self.echo_uid_label = QLabel(u"uID：")
+        self.echo_uid_lineedit = QLineEdit()
+        self.echo_uid_lineedit.setFixedWidth(70)
+        self.cmd_lineedit = QLineEdit(u'恭喜你！答对了')
+        self.change_button = QPushButton(u"发送数据")
         t_hbox = QHBoxLayout()
         t_hbox.addWidget(self.cmd_label)
+        t_hbox.addWidget(self.echo_uid_label)
+        t_hbox.addWidget(self.echo_uid_lineedit)
         t_hbox.addWidget(self.cmd_lineedit)
         t_hbox.addWidget(self.change_button)
 
@@ -276,7 +280,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         for pos in range(1, 9):
             self.tree_com.setColumnWidth(pos, 70)
 
-        self.port_frame = port_frame(30, self.uid_list, self.s_lcd_buf, self.r_lcd_buf)
+        self.port_frame = port_frame(30, self.jsq_tcb, self.s_lcd_buf, self.r_lcd_buf)
 
         box = QVBoxLayout()
         box.addLayout(e_hbox)
@@ -399,6 +403,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
     def tree_1_clicked(self, item, column):
         self.devid_lineedit.setText(unicode(item.text(1)))
         self.an_devid_lineedit.setText(unicode(item.text(1)))
+        self.echo_uid_lineedit.setText(unicode(item.text(1)))
 
     # 双击获取设备ID
     def tree_2_clicked(self, item, column):
@@ -512,7 +517,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         if not self.rcmd_buf.empty():
             r_cmd = self.rcmd_buf.get()
             # 此处指令解析放在协议文件的内部实现,方便实现硬件的兼容
-            tree_dict = self.dev_pro.answer_cmd_decode(self.uid_list, r_cmd)
+            tree_dict = self.dev_pro.answer_cmd_decode(self.jsq_tcb, r_cmd)
             # 获取指令中的ID
             if tree_dict:
                 logging.debug(u"接收数据：R : {0}".format(tree_dict))
@@ -557,16 +562,24 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
 
             if button_str == u"发送数据":
                 i = 0
+                uid_str = str(self.echo_uid_lineedit.text())
                 msg = unicode(self.cmd_lineedit.text())
                 msg_str = u"S: 发送回显 : %s, UID：" % msg
-                if "uid_list" in self.uid_list:
-                    for item in self.uid_list["uid_list"]:
-                        cur_msg = u"[ %d ] %s" % (i, msg)
+                if uid_str:
+                    uid = int(uid_str)
+                    if uid in self.dev_pro.dtqdict:
+                        cur_msg = u"uID: %10u %s" % (uid, msg)
+                        msg_str = msg_str + " [ %10u ]" % uid
+                        s_msg = self.dev_pro.get_echo_cmd_msg(uid, cur_msg)
+                        self.usb_snd_hook(s_msg)
+                else:
+                    for item in self.dev_pro.dtqdict:
+                        cur_msg = u"uID: %10u %s" % (item, msg)
                         i = i + 1
                         s_msg = self.dev_pro.get_echo_cmd_msg(item, cur_msg)
                         self.usb_snd_hook(s_msg)
                         msg_str = msg_str + " [ %10u ]" % item
-                    self.s_lcd_buf.put(msg_str)
+                self.s_lcd_buf.put(msg_str)
                 return
 
             if button_str == u"查看配置":

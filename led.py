@@ -12,10 +12,14 @@ class LED(QLabel):
     def __init__(self,x,parent=None):
         super(LED, self).__init__(parent)
         self.ico_path = os.path.abspath("./")
-        self.led_b = QImage(self.ico_path + './data/ico/ledlightblue.ico')
-        self.led_g = QImage(self.ico_path + './data/ico/ledgreen.ico')
-        self.led_r = QImage(self.ico_path + './data/ico/ledred.ico')
-        self.led_y = QImage(self.ico_path + './data/ico/ledgray.ico')
+        self.led_b = QImage()
+        self.led_b.load(self.ico_path + './data/ico/ledlightblue.ico')
+        self.led_g = QImage()
+        self.led_g.load(self.ico_path + './data/ico/ledgreen.ico')
+        self.led_r = QImage()
+        self.led_r.load(self.ico_path + './data/ico/ledred.ico')
+        self.led_y = QImage()
+        self.led_y.load(self.ico_path + './data/ico/ledgray.ico')
         self.color_dict = {'blue':self.led_b,'green':self.led_g,'red':self.led_r,'gray':self.led_y}
         self.resize(x,x)
         self.setAlignment(Qt.AlignCenter)
