@@ -99,7 +99,7 @@ class dtq_hid_debuger(QWidget, hid_event):
         # 数据缓冲区
         self.rcmd_buf = Queue.Queue()
         self.scmd_buf = Queue.Queue()
-        self.r_lcd_buf = Queue.Queue(maxsize=100)
+        self.r_lcd_buf = Queue.Queue()
         self.s_lcd_buf = Queue.Queue()
         # 表格 UID名单
         self.qtree_dict = {}
@@ -224,8 +224,6 @@ class dtq_hid_debuger(QWidget, hid_event):
         self.usb_s_sum_redit = QLineEdit(u'0')
         self.lcd_r_label = QLabel(u"LCD：")
         self.lcd_r_edit = QLineEdit(u'0')
-        self.tree_r_label = QLabel(u"TREE：")
-        self.tree_r_edit = QLineEdit(u'0')
  
         debug_hbox.addWidget(self.debug_label)
         debug_hbox.addWidget(self.usb_r_sum_label)
@@ -234,8 +232,6 @@ class dtq_hid_debuger(QWidget, hid_event):
         debug_hbox.addWidget(self.usb_s_sum_redit)
         debug_hbox.addWidget(self.lcd_r_label)
         debug_hbox.addWidget(self.lcd_r_edit)
-        debug_hbox.addWidget(self.tree_r_label)
-        debug_hbox.addWidget(self.tree_r_edit)
 
         t_hbox = QHBoxLayout()
         t_hbox.addWidget(self.cmd_label)
@@ -329,7 +325,7 @@ class dtq_hid_debuger(QWidget, hid_event):
         self.s_lcd_timer.timeout.connect(self.s_lcd_process)
         self.s_lcd_timer.start(10)
         self.r_tree_timer = QTimer()
-        self.r_tree_timer.timeout.connect(self.r_tree_process)
+        self.r_tree_timer.timeout.connect(self.update_tree_process)
         self.r_tree_timer.start(500)
         # 创建 USB 数据解析进程
         self.usb_rbuf_process = QProcessNoStop(self.usb_cmd_rev_process)
@@ -358,7 +354,7 @@ class dtq_hid_debuger(QWidget, hid_event):
                 self.alive = False
                 self.led.set_color("gray")
 
-    def r_tree_process(self):
+    def update_tree_process(self):
         if self.alive and self.dev_pro.dtqdict:
             for uid in self.dev_pro.dtqdict:
                 if uid:
@@ -379,14 +375,12 @@ class dtq_hid_debuger(QWidget, hid_event):
 
     # 数据显示进程
     def r_lcd_process(self):
-        if self.alive:
-            if not self.r_lcd_buf.empty():
-                r_msg = self.r_lcd_buf.get()
-                self.r_browser.append(r_msg)
+       if not self.r_lcd_buf.empty():
+            r_msg = self.r_lcd_buf.get()
+            self.r_browser.append(r_msg)
 
     def r_lcd_hook(self, msg):
-        if self.alive:
-            self.r_lcd_buf.put(msg)
+        self.r_lcd_buf.put(msg)
 
     # 数据显示进程
     def s_lcd_process(self):

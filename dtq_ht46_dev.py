@@ -19,13 +19,16 @@ class dtq():
         # 语音数据管理
         self.devid = devid    # 设备ID
         self.upos = 0
-        self.voice_dict = {}  # 语音数据缓冲区
         self.start_pos = 0    # 起始包包号
+        self.curpos = 0
         self.stop_pos = 0     # 结束包包号
         self.f_name = None    # MP3 文件名
         self.f_path = None    # MP3 文件存放路径
+        self.f_handle = None
         self.player = None    # MP3 播放器实例
-        self.state = 0
+        self.msg_str = ""
+        self.format_err = ""
+        self.cntsize = 0
         # 通用数据管理
         self.rev_seq = 0
         self.send_seq = 0
@@ -46,81 +49,12 @@ class dtq():
         self.player.play()
         # print u"[ %010u ]:播放测试 :%s！" % (self.devid, self.f_name)
 
-    # 数据校验
-    def check(self,r_lcd):
-        # 校验
-        max_size = 0
-        f = open(self.f_path, 'rb')
-        rd_pos = 0
-        pac_err = ""
-        pac_ok_str = ""
-        for item in range(self.start_pos, self.stop_pos+1):
-            if item in self.voice_dict:
-                f.seek(rd_pos,0)
-                pac_len = len(self.voice_dict[item])
-                rd_data = f.read(pac_len)
-                # 读回数据输出
-                rd_str = u"RD: 偏移:%d 数据: " % rd_pos
-                for rd_item in rd_data:
-                    rd_str += " %02X" % (ord(rd_item))
-                # 写入数据输出
-                wr_str = u"WR: 偏移:%d 数据: " % rd_pos
-                for wr_item in self.voice_dict[item]:
-                    wr_str += " %02X" % (wr_item)
-                rd_pos = rd_pos + pac_len
-                print rd_str
-                print wr_str
-                err = 0
-                for pos in range(0, pac_len):
-                    if ord(rd_data[pos]) != self.voice_dict[item][pos]:
-                        print "write err! rd:%x wr:%x" % (ord(rd_data[pos]), 
-                            self.voice_dict[item][pos])
-                        err = 1
-                if err:
-                    print "COMPARE ERR: PACK[%d] %d " % (item,err)
-                    pac_err += "[ %3d ]" % item
-                else:
-                    pac_ok_str += "[ %3d ]" % item
-        f.close()
-        check_str = u"\t检验出错数据包: %s \r\n" % (pac_err)
-        info_str = u"\t理论文件大小:%d 实际文件大小:%d 检验总长度:%d \r\n" % \
-            (max_size,int(os.path.getsize(self.f_path)),cnt_size)
-        msg_str = info_str + check_str
-        r_lcd(msg_str)
-
     # MP3 格式检测
     def mp3_format_check(self, voice_data):
         if voice_data[0] == 0xFF and voice_data[1] == 0xFB:
             return True
         else:
             return False
-
-    # 转换文件
-    def decode(self, r_lcd):
-        self.f_path = os.path.abspath("./") + '/VOICE/%s' % (self.f_name)
-        cnt_size = 0
-        msg_str = ""
-        format_err = ""
-        f = open(self.f_path, 'wb')
-        for item in range(self.start_pos, self.stop_pos+1):
-            if item in self.voice_dict:
-                wr_data = bytearray(self.voice_dict[item])
-                f.write(wr_data)
-                cnt_size += len(wr_data)
-                if self.mp3_format_check(self.voice_dict[item]) == False:
-                    format_err += "[ %3d ]" % item
-            else:
-                msg_str += "[ %3d ]" % item
-        f.close()
-        msg_str = u"[ %010u ]:数据记录 文件大小: [ %d ], 发送数据包: [ %d ], 接收数据包: [ %d ]！\r\n" % \
-            (self.devid, cnt_size, self.stop_pos+1-self.start_pos, self.pac_cnt)
-        msg_str += u"丢包统计：\r\n"
-        
-        msg_str += u"错帧统计：\r\n"
-        msg_str += format_err
-        r_lcd(msg_str)
-        self.voice_dict.clear()
-        self.state = 0
 
     # 打印提示信息
     def decode_porcess(self, r_lcd, voice_info, vocie_msg):
@@ -131,19 +65,42 @@ class dtq():
             msg_str = u"[ %010u ]:录音开始 :%s！" % (self.devid, self.f_name)
             r_lcd(msg_str)
             # 记录初始数据
-            # print voice_info
             self.pac_cnt = 1
             self.start_pos = voice_info["POS"]
-            self.voice_dict[voice_info["POS"]] = vocie_msg
-            self.state = 1
+            self.curpos = voice_info["POS"]
+            self.msg_str = ""
+            self.format_err = ""
+            self.f_path = os.path.abspath("./") + '/VOICE/%s' % (self.f_name)
+            self.f_handle = open(self.f_path, 'wb')
+            wr_data = bytearray(vocie_msg)
+            self.f_handle.write(wr_data)
+            if self.mp3_format_check(vocie_msg) == False:
+                self.format_err += "[ %3d ]" %  voice_info["POS"]
+            self.cntsize = len(wr_data)
         else:
-            if voice_info["POS"] not in self.voice_dict:
-                self.pac_cnt = self.pac_cnt + 1
-            self.voice_dict[voice_info["POS"]] = vocie_msg
-            if voice_info["FLG"] == 1:
-                self.stop_pos = voice_info["POS"]
-                # 解码
-                self.decode(r_lcd)
+            if self.f_handle:
+                if voice_info["POS"] == (self.curpos+1):
+                    self.pac_cnt = self.pac_cnt + 1
+                    wr_data = bytearray(vocie_msg)
+                    self.f_handle.write(wr_data)
+                    self.cntsize += len(wr_data)
+                    if self.mp3_format_check(vocie_msg) == False:
+                        self.format_err += "[ %3d ]" % voice_info["POS"]
+                else:
+                    for item in range(self.curpos, voice_info["POS"]):
+                        self.msg_str += "[ %3d ]" % item
+                if voice_info["FLG"] == 1:
+                    self.stop_pos = voice_info["POS"]
+                    # 解码
+                    self.f_handle.close()
+                    msg_str = u"[ %010u ]:数据记录 文件大小: [ %d ], 发送数据包: [ %d ], 接收数据包: [ %d ]！\r\n" % \
+                        (self.devid, self.cntsize, self.stop_pos+1-self.start_pos, self.pac_cnt)
+                    self.msg_str += msg_str + u"丢包统计：\r\n"
+                    self.msg_str += u"错帧统计：\r\n"
+                    self.msg_str += self.format_err
+                    r_lcd(self.msg_str)
+                else:
+                    self.curpos = voice_info["POS"]
 
 class dtq_xes_ht46():
     def __init__(self, r_lcd_hook, usb_snd_hook):
