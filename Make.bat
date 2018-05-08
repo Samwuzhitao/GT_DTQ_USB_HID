@@ -1,4 +1,4 @@
-pyinstaller -F -w -i ./data./dtq.ico DTQ_USB_HID.py
+pyinstaller -F -w -i ./image/dtq.ico DTQ_USB_HID.py
 del DTQ_USB_HID.spec
 del *.pyc
 del *.txt

@@ -40,6 +40,14 @@ class dtq_tcb():
         self.answer_cnt = 0
         self.answer_cnt_s0 = 0
         self.answer_cnt_s1 = 0
+        # 当前答案
+        self.rssi_str = ""
+        self.power = 0
+        self.press_cnt = 0
+        self.key_cnt = 0
+        self.send_cnt = 0
+        self.echo_cnt = 0
+        self.ans_str = ""
 
     # 答题器包号管理
     def seq_add(self):
@@ -125,6 +133,7 @@ class dtq_xes_ht46():
         self.len = None
         self.data = []
         self.dfu_s = 0
+        self.answer_code = {1:"A",2:"B",3:"C",4:"D",5:"E",6:"F",7:"G"}
         self.encode_cmds_name = { 
             "ANSWER_INFO": 0x01,
             "ANSWER_ECHO": 0x04,
@@ -388,8 +397,8 @@ class dtq_xes_ht46():
 
     # 下发回显指令操作结果返回
     def echo_info_err(self, jsq_tcb, dtq, msg):
-        self.r_lcd(u"R: 发送回显 : ERR: %d " % (msg[0]))
-        # print u"R: 发送回显 : ERR: %d " % (msg[0]
+        # self.r_lcd(u"R: 发送回显 : ERR: %d " % (msg[0]))
+        pass
 
     # 发送控制参数操作结果返回
     def ctl_info_err(self, jsq_tcb, dtq, msg):
@@ -457,39 +466,36 @@ class dtq_xes_ht46():
     # 上报答案格式解析
     def answer_info_decode(self, jsq_tcb, dtq, msg):
         rpos = 0
-        tree_dict = {}
-        show_msg = "R: [ %010u ] RSSI: -%3d, " % (dtq.devid, msg[rpos: rpos+1][0])
+        dtq.rssi_str = "-%d" % msg[rpos: rpos+1][0]
         rpos = rpos + 1  # RSSI
         rpos = rpos + 9  # TIME
-        show_msg += "POWER:%6d, " %  msg[rpos: rpos+1][0]
+        dtq.power = msg[rpos: rpos+1][0]
         rpos = rpos + 4  # POWER
-        show_msg += "PRESS:%6d, " % self.uid_pos_code(msg[rpos: rpos+4])
+        dtq.press_cnt = self.uid_pos_code(msg[rpos: rpos+4])
         rpos = rpos + 4  # PRESS
-        show_msg += "KEY:%6d, " % self.uid_pos_code(msg[rpos: rpos+4])
+        dtq.key_cnt = self.uid_pos_code(msg[rpos: rpos+4])
         rpos = rpos + 4  # KEY
-        show_msg += "SEND:%6d, " % self.uid_pos_code(msg[rpos: rpos+4])
-        cnt_start = self.uid_pos_code(msg[rpos: rpos+4])
+        dtq.send_cnt = self.uid_pos_code(msg[rpos: rpos+4])
         rpos = rpos + 4  # SEND
-        show_msg += "ECHO:%6d, " % self.uid_pos_code(msg[rpos: rpos+4])
+        dtq.echo_cnt = self.uid_pos_code(msg[rpos: rpos+4])
         rpos = rpos + 4  # ECHO
         answer_type = msg[rpos: rpos+1][0]
-        show_msg += "TYPE:%x, " % answer_type
         rpos = rpos + 1  # TYPE
+        dtq.ans_str = ""
         if (answer_type < 4) or (answer_type > 5):
-            show_msg += "ANSWERS:%x " % (msg[rpos: rpos+1][0])
+            dtq.ans_str = "%s" % self.answer_code[msg[rpos: rpos+1][0]]
         else:
-            show_msg += "ANSWERS:%s " % (u"{0}".format(msg[rpos: rpos+16]))
-        self.r_lcd(show_msg)
-        # print show_msg
+            answer = msg[rpos: rpos+16]
+            for item in answer:
+                if item:
+                    dtq.ans_str += "%s" % self.answer_code[item]
+        # 计数检测
+        # print dtq.answer_cnt_s1,dtq.send_cnt,dtq.answer_cnt_s0
         dtq.answer_cnt = dtq.answer_cnt + 1
-        tree_dict["UID"] = dtq.devid
-        tree_dict["ANSWER"] = dtq.answer_cnt
-        tree_dict["CMD"] = "ANSWER"
-        if cnt_start < dtq.answer_cnt_s0 or cnt_start == 0: 
-            dtq.answer_cnt_s0 = cnt_start-1
+        if dtq.send_cnt < dtq.answer_cnt_s0 or dtq.send_cnt == 0 or dtq.answer_cnt_s1 == 0: 
+            dtq.answer_cnt_s0 = dtq.send_cnt-1
             dtq.answer_cnt = 1
-        dtq.answer_cnt_s1 = cnt_start - dtq.answer_cnt_s0
-        # print dtq.answer_cnt_s1,cnt_start,dtq.answer_cnt_s0
+        dtq.answer_cnt_s1 = dtq.send_cnt - dtq.answer_cnt_s0
         # 返回回显
         self.sum_rcnt = 0
         self.sum_scnt = 0
@@ -499,18 +505,16 @@ class dtq_xes_ht46():
                 self.sum_rcnt = self.sum_rcnt + self.dtqdict[tmp_uid].answer_cnt
                 self.sum_scnt = self.sum_scnt + self.dtqdict[tmp_uid].answer_cnt_s1
         self.lost_rate = self.sum_rcnt*100.0/self.sum_scnt
-        cur_msg  = u"[ %s ]: %7d " % (tree_dict["CMD"][0:2], tree_dict[tree_dict["CMD"]])
+        cur_msg  = u"[ %s ]: %7d " % ("AN", dtq.answer_cnt)
         cur_msg += " "*16
         cur_msg += u"[ RA ]: %3.3f" % (self.lost_rate)
-        s_msg = self.get_echo_cmd_msg(tree_dict["UID"], cur_msg)
+        s_msg = self.get_echo_cmd_msg(dtq.devid, cur_msg)
         self.usb_snd(s_msg)
-
-        return tree_dict
+        return 
 
     # 上报语音格式解析
     def answer_voice_update(self, jsq_tcb, dtq, msg):
         voice_msg = {}
-        tree_dict = {}
         rpos = 0
         voice_msg["RSSI"] = msg[rpos:rpos+1][0]
         rpos = rpos + 1     # RSSI
@@ -528,19 +532,12 @@ class dtq_xes_ht46():
         rpos = rpos + 208   # PAC_VOICE
         # print msg[rpos:]
         dtq.decode_porcess(self.r_lcd, voice_msg, voice_data)
-        # 返回处理结果
-        tree_dict["UID"] = dtq.devid
-        tree_dict["VOICE_FLG"] = voice_msg["FLG"]
-        tree_dict["VOICE"] = dtq.pac_cnt
-        tree_dict["CMD"] = "VOICE"
-        return tree_dict
+        return 
 
    # 上报刷卡格式解析
     def card_id_update(self, jsq_tcb, dtq, msg):
         rpos = 0
-        tree_dict = {}
         uid = self.uid_neg_code(msg[rpos:rpos+4])
-        # devid = self.uid_pos_code(msg[rpos:rpos+4])
         rpos = rpos + 4
         rep_uid = self.uid_neg_code(msg[rpos:rpos+4])
         # 返回处理结果
@@ -548,20 +545,15 @@ class dtq_xes_ht46():
         self.r_lcd(show_msg)
         cur_dtq = self.get_dtq(uid)
         cur_dtq.card_cnt = cur_dtq.card_cnt + 1
-        tree_dict["UID"] = uid
-        tree_dict["CARD_ID"] = cur_dtq.card_cnt
-        tree_dict["CMD"] = "CARD_ID"
         # 返回回显
-        cur_msg  = u"[ %s ]: %7d " % (tree_dict["CMD"][0:2], tree_dict[tree_dict["CMD"]])
-        s_msg = self.get_echo_cmd_msg(tree_dict["UID"], cur_msg)
+        cur_msg  = u"[ %s ]: %7d " % ("CA", cur_dtq.card_cnt)
+        s_msg = self.get_echo_cmd_msg(uid, cur_msg)
         self.usb_snd(s_msg)
-        return tree_dict
+        return 
 
     def power_state_update(self, jsq_tcb, dtq, msg):
-        tree_dict = {}
         rpos = 0
         uid = self.uid_neg_code(msg[rpos:rpos+4])
-        devid = self.uid_pos_code(msg[rpos:rpos+4])
         rpos = rpos + 4
         state = msg[rpos:rpos+1][0]
         rpos = rpos + 1
@@ -570,10 +562,10 @@ class dtq_xes_ht46():
         cur_dtq = self.get_dtq(uid)
         if state == 1:
             cur_dtq.power_cnt = cur_dtq.power_cnt + 1
-        tree_dict["UID"] = uid
-        tree_dict["POWER"] = cur_dtq.power_cnt
-        tree_dict["CMD"] = "POWER"
-        return tree_dict
+        cur_msg  = u"[ %s:%d ]: %6d " % ("PO", state, cur_dtq.power_cnt)
+        s_msg = self.get_echo_cmd_msg(uid, cur_msg)
+        self.usb_snd(s_msg)
+        return
 
     def dev_info_msg_update(self, jsq_tcb, dtq, msg):
         rpos = 0
