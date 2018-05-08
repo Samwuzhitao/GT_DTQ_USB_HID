@@ -113,7 +113,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         # 升级协议
         self.dfu_pro = None
 
-        self.setWindowTitle(u"USB HID调试工具v2.0.13")
+        self.setWindowTitle(u"USB HID调试工具v2.0.14")
         self.connect_label = QLabel(u"连接状态:")
         self.connect_label.setFixedWidth(60)
         self.led = LED(30)
@@ -156,7 +156,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         self.ctl_label = QLabel(u"状态控制：")
         self.devid_label = QLabel(u"uID：")
         self.devid_lineedit = QLineEdit()
-        self.devid_lineedit.setFixedWidth(70)
+        self.devid_lineedit.setFixedWidth(80)
         self.led_label = QLabel(u"指示灯：")
         self.led_color_combo = QComboBox(self)
         self.led_color_combo.addItems([u"红:0x01", u"绿:0x02", u"蓝:0x03", u"黄:0x04",u"紫:0x05",u"青:0x06",u"白:0x07"])
@@ -236,7 +236,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         self.cmd_label = QLabel(u"回显功能：")
         self.echo_uid_label = QLabel(u"uID：")
         self.echo_uid_lineedit = QLineEdit()
-        self.echo_uid_lineedit.setFixedWidth(70)
+        self.echo_uid_lineedit.setFixedWidth(80)
         self.cmd_lineedit = QLineEdit(u'恭喜你！答对了')
         self.change_button = QPushButton(u"发送数据")
         t_hbox = QHBoxLayout()
@@ -249,7 +249,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         self.q_label = QLabel(u"答题功能：")
         self.an_devid_label = QLabel(u"uID：")
         self.an_devid_lineedit = QLineEdit()
-        self.an_devid_lineedit.setFixedWidth(70)
+        self.an_devid_lineedit.setFixedWidth(80)
         self.q_combo = QComboBox(self)
         self.q_combo.setFixedSize(105, 20)
         self.q_combo.addItems([u"单题单选:0x01", u"是非判断:0x02",
@@ -457,6 +457,9 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
                         msg = self.dev_pro.get_dfu_msg(0x30, image_info)
                         self.usb_snd_hook(msg)
                         return
+                else:
+                    self.usb_dfu_timer.stop()
+
             # 切换定时器
             if self.dev_pro.dfu_s == 1:
                 self.usb_dfu_timer.stop()
@@ -650,6 +653,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
                     devid = int(devid_str)
                 else:
                     devid = 0
+                uid_str = ""
                 led_cn_str = unicode(self.led_combo.currentText())
                 led_cn = int(led_cn_str.split(":")[1][2:]) 
                 led_col_str = unicode(self.led_color_combo.currentText())
@@ -658,9 +662,18 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
                 beep_cn = int(beep_cn_str.split(":")[1][2:])
                 motor_cn_str = unicode(self.motor_combo.currentText())
                 motor_cn = int(motor_cn_str.split(":")[1][2:])
-                msg = self.dev_pro.get_dtq_ctl_msg(devid, led_cn, led_c, beep_cn, motor_cn)
-                self.usb_snd_hook(msg)
-                self.s_lcd_buf.put(u"S: 同步状态: UID：[ %10u ]" % devid)
+                # print led_cn,led_c,beep_cn,motor_cn
+                if devid:
+                    msg = self.dev_pro.get_dtq_ctl_msg(devid, led_cn, led_c, beep_cn, motor_cn)
+                    uid_str = "[ %10u ]" % devid
+                    self.usb_snd_hook(msg)
+                else:
+                    for item in self.dev_pro.dtqdict:
+                        if item:
+                            msg = self.dev_pro.get_dtq_ctl_msg(item, led_cn, led_c, beep_cn, motor_cn)
+                            uid_str += "[ %10u ]" % item
+                            self.usb_snd_hook(msg)
+                self.s_lcd_buf.put(u"S: 同步状态: UID：%s" % uid_str)
                 return
 
             if button_str == u"查看白名单":
