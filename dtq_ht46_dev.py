@@ -19,30 +19,32 @@ class dtq_tcb():
         # 语音数据管理
         self.devid = devid    # 设备ID
         self.upos = 0
+        # voice_tcb:  语音数据管理
         self.start_pos = 0    # 起始包包号
-        self.curpos = 0
+        self.curpos = 0       # 当前包包号
         self.stop_pos = 0     # 结束包包号
         self.f_name = None    # MP3 文件名
         self.f_path = None    # MP3 文件存放路径
-        self.f_handle = None
+        self.f_handle = None  # MP3 文件句柄
         self.player = None    # MP3 播放器实例
         self.msg_str = ""
         self.format_err = ""
         self.cntsize = 0
         self.rev_state = 0
-        # 通用数据管理
+        # SEQ 管理
         self.rev_seq = 0
         self.send_seq = 0
-        # 统计计数
-        self.pac_cnt = 0      # 语音数据包计数器
+        # dtq_tcb：   统计计数
+        self.pac_cnt = 0
         self.card_cnt = 0
         self.power_cnt = 0
         self.answer_cnt = 0
         self.answer_cnt_s0 = 0
         self.answer_cnt_s1 = 0
-        # 当前答案
-        self.rssi_str = ""
+        # power_tcb  ：充电管理
         self.power = 0
+        # answer_tcb : 普通题目管理
+        self.rssi_str = ""
         self.press_cnt = 0
         self.key_cnt = 0
         self.send_cnt = 0
@@ -60,61 +62,66 @@ class dtq_tcb():
         # print u"[ %010u ]:播放测试 :%s！" % (self.devid, self.f_name)
 
     # MP3 格式检测
-    def mp3_format_check(self, voice_data):
-        if voice_data[0] == 0xFF and voice_data[1] == 0xFB:
+    def mp3_format_check(self, pac_msg):
+        if pac_msg[0] == 0xFF and pac_msg[1] == 0xFB:
             return True
         else:
             return False
 
     # 打印提示信息
-    def decode_porcess(self, r_lcd, voice_info, vocie_msg):
-        if voice_info["FLG"] == 0 and voice_info["POS"] == 1 and self.rev_state == 0:
+    def decode_porcess(self, r_lcd, pac_flg, pac_num, pac_msg):
+        if pac_flg == 0 and pac_num == 1 and self.rev_state == 0:
             voice_time = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
             self.f_name = "VOICE_%010u_%s.mp3" % (self.devid, voice_time)
             msg_str = u"[ %010u ]:录音开始 :%s！" % (self.devid, self.f_name)
             r_lcd(msg_str)
             # 记录初始数据
             self.pac_cnt = 1
-            self.start_pos = voice_info["POS"]
-            self.curpos = voice_info["POS"]
+            self.start_pos = pac_num
+            self.curpos = pac_num
             self.msg_str = ""
             self.format_err = ""
             self.f_path = os.path.abspath("./") + '/VOICE/%s' % (self.f_name)
             self.f_handle = open(self.f_path, 'wb')
-            wr_data = bytearray(vocie_msg)
+            wr_data = bytearray(pac_msg)
             self.f_handle.write(wr_data)
-            if self.mp3_format_check(vocie_msg) == False:
-                self.format_err += "[ %3d ]" %  voice_info["POS"]
-            self.cntsize = len(wr_data)
+            if self.mp3_format_check(pac_msg) == False:
+                self.format_err += "[ %3d ]" %  pac_num
+            self.cntsize = 208
             self.rev_state = 1
         else:
             if self.rev_state == 1:
-                if voice_info["POS"] == (self.curpos+1):
+                if pac_num == (self.curpos+1):
                     self.pac_cnt = self.pac_cnt + 1
-                    wr_data = bytearray(vocie_msg)
+                    wr_data = bytearray(pac_msg)
                     if not self.f_handle:
                         self.f_path = os.path.abspath("./") + '/VOICE/%s' % (self.f_name)
                         self.f_handle = open(self.f_path, 'wb')
                     self.f_handle.write(wr_data)
-                    self.cntsize += len(wr_data)
-                    if self.mp3_format_check(vocie_msg) == False:
-                        self.format_err += "[ %3d ]" % voice_info["POS"]
+                    self.cntsize += 208
+                    if self.mp3_format_check(pac_msg) == False:
+                        self.format_err += "[ %3d ]" % pac_num
                 else:
-                    for item in range(self.curpos, voice_info["POS"]):
+                    for item in range(self.curpos, pac_num):
                         self.msg_str += "[ %3d ]" % item
-            if voice_info["FLG"] == 1:
-                self.stop_pos = voice_info["POS"]
+            if pac_flg == 1:
+                self.stop_pos = pac_num
                 # 解码
-                self.f_handle.close()
+                if self.f_handle:
+                    self.f_handle.close()
                 self.rev_state = 0
                 msg_str = u"[ %010u ]:数据记录 文件大小: [ %d ], 发送数据包: [ %d ], 接收数据包: [ %d ]！\r\n" % \
                     (self.devid, self.cntsize, self.stop_pos+1-self.start_pos, self.pac_cnt)
-                self.msg_str = msg_str + u"丢包统计：\r\n" + self.msg_str + "\r\n"
+                if self.msg_str:
+                    self.msg_str = msg_str + u"丢包统计：\r\n" + self.msg_str + "\r\n"
+                else:
+                    self.msg_str = msg_str + u"丢包统计：\r\n"
                 self.msg_str += u"错帧统计：\r\n"
-                self.msg_str += self.format_err + "\r\n"
+                if self.format_err:
+                    self.msg_str += self.format_err + "\r\n"
                 r_lcd(self.msg_str)
             else:
-                self.curpos = voice_info["POS"]
+                self.curpos = pac_num
 
 class dtq_xes_ht46():
     def __init__(self, r_lcd_hook, usb_snd_hook):
@@ -483,19 +490,21 @@ class dtq_xes_ht46():
         rpos = rpos + 1  # TYPE
         dtq.ans_str = ""
         if (answer_type < 4) or (answer_type > 5):
-            dtq.ans_str = "%s" % self.answer_code[msg[rpos: rpos+1][0]]
+            tmp = msg[rpos: rpos+1][0]
+            if tmp > 0 and tmp < 8:
+                dtq.ans_str = "%s" % self.answer_code[tmp]
         else:
             answer = msg[rpos: rpos+16]
             for item in answer:
-                if item:
+                if item > 0 and item < 8:
                     dtq.ans_str += "%s" % self.answer_code[item]
         # 计数检测
         # print dtq.answer_cnt_s1,dtq.send_cnt,dtq.answer_cnt_s0
         dtq.answer_cnt = dtq.answer_cnt + 1
-        if dtq.send_cnt < dtq.answer_cnt_s0 or dtq.send_cnt == 0 or dtq.answer_cnt_s1 == 0: 
-            dtq.answer_cnt_s0 = dtq.send_cnt-1
+        if dtq.send_cnt < dtq.answer_cnt_s0 or dtq.send_cnt == 0 or dtq.answer_cnt_s0 == 0 or dtq.answer_cnt > dtq.send_cnt:
+            dtq.answer_cnt_s0 = dtq.send_cnt
             dtq.answer_cnt = 1
-        dtq.answer_cnt_s1 = dtq.send_cnt - dtq.answer_cnt_s0
+        dtq.answer_cnt_s1 = dtq.send_cnt - dtq.answer_cnt_s0 + 1
         # 返回回显
         sum_rcnt = 0
         sum_scnt = 0
@@ -516,24 +525,24 @@ class dtq_xes_ht46():
 
     # 上报语音格式解析
     def answer_voice_update(self, jsq_tcb, dtq, msg):
-        voice_msg = {}
+        # voice_msg = {}
         rpos = 0
-        voice_msg["RSSI"] = msg[rpos:rpos+1][0]
+        # voice_msg["RSSI"] = msg[rpos:rpos+1][0]
+        dtq.rssi_str = "-%d" % msg[rpos: rpos+1][0]
         rpos = rpos + 1     # RSSI
-        voice_msg["FLG"] = msg[rpos:rpos+1][0]
+        pac_flg = msg[rpos:rpos+1][0]
         rpos = rpos + 1     # FLG
-        pac_num = msg[rpos:rpos+2]
-        voice_msg["POS"] = (pac_num[0] << 8 | pac_num[1])
-        # print "POS = %d " % voice_msg["POS"]
+        voice_num = msg[rpos:rpos+2]
+        pac_num = (voice_num[0] << 8 | voice_num[1])
         rpos = rpos + 2     # PAC_NUM
-        voice_data = msg[rpos:rpos+208]
+        pac_msg = msg[rpos:rpos+208]
         # debug_str = "R: "
-        # for item in voice_data:
+        # for item in pac_msg:
         #    debug_str += " %02X" % (item)
         # print debug_str
         rpos = rpos + 208   # PAC_VOICE
         # print msg[rpos:]
-        dtq.decode_porcess(self.r_lcd, voice_msg, voice_data)
+        dtq.decode_porcess(self.r_lcd, pac_flg, pac_num, pac_msg)
         return 
 
    # 上报刷卡格式解析

@@ -202,7 +202,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         self.sum_redit.setFont(QFont("Roman times", 15, QFont.Bold))
         self.sum_rate_label = QLabel(u"按键成功率:")
         self.sum_rate_label.setFont(QFont("Roman times", 15, QFont.Bold))
-        self.sum_rate_edit = QLineEdit(u'0%')
+        self.sum_rate_edit = QLineEdit(u'0')
         self.sum_rate_edit.setFont(QFont("Roman times", 15, QFont.Bold))
 
         k_hbox.addWidget(self.k_sum_label)
