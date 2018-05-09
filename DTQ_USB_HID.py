@@ -113,7 +113,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         # 升级协议
         self.dfu_pro = None
 
-        self.setWindowTitle(u"USB HID调试工具v2.0.14")
+        self.setWindowTitle(u"USB HID调试工具v2.0.15")
         self.connect_label = QLabel(u"连接状态:")
         self.connect_label.setFixedWidth(60)
         self.led = LED(30)
@@ -156,7 +156,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         self.ctl_label = QLabel(u"状态控制：")
         self.devid_label = QLabel(u"uID：")
         self.devid_lineedit = QLineEdit()
-        self.devid_lineedit.setFixedWidth(80)
+        self.devid_lineedit.setFixedWidth(135)
         self.led_label = QLabel(u"指示灯：")
         self.led_color_combo = QComboBox(self)
         self.led_color_combo.addItems([u"红:0x01", u"绿:0x02", u"蓝:0x03", u"黄:0x04",u"紫:0x05",u"青:0x06",u"白:0x07"])
@@ -236,7 +236,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         self.cmd_label = QLabel(u"回显功能：")
         self.echo_uid_label = QLabel(u"uID：")
         self.echo_uid_lineedit = QLineEdit()
-        self.echo_uid_lineedit.setFixedWidth(80)
+        self.echo_uid_lineedit.setFixedWidth(135)
         self.cmd_lineedit = QLineEdit(u'恭喜你！答对了')
         self.change_button = QPushButton(u"发送数据")
         t_hbox = QHBoxLayout()
@@ -249,7 +249,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         self.q_label = QLabel(u"答题功能：")
         self.an_devid_label = QLabel(u"uID：")
         self.an_devid_lineedit = QLineEdit()
-        self.an_devid_lineedit.setFixedWidth(80)
+        self.an_devid_lineedit.setFixedWidth(135)
         self.q_combo = QComboBox(self)
         self.q_combo.setFixedSize(105, 20)
         self.q_combo.addItems([u"单题单选:0x01", u"是非判断:0x02",
@@ -276,10 +276,10 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
 
         self.tree_com = QTreeWidget()
         self.tree_com.setFont(QFont(u"答题器数据统计", 8, False))
-        self.tree_com.setColumnCount(9)
+        self.tree_com.setColumnCount(14)
         self.tree_com.setHeaderLabels([u'序号', u'uID', u'RSSI', u'电量', 
-            u'按键次数', u'接收次数', u'发送次数', u'回显次数',u'答案',
-            u'AN_CNT', u'CA_CNT',u'PO_CNT',u'VO_CNT'])
+            u'按压次数', u'按键次数', u'发送次数', u'回显次数',u'答案',
+            u'AN_S0', u'AN_CNT', u'CA_CNT',u'PO_CNT',u'VO_CNT'])
         self.tree_com.setColumnWidth(0, 40)
         self.tree_com.setColumnWidth(1, 70)
         self.tree_com.setColumnWidth(2, 35)
@@ -287,7 +287,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         for pos in range(4, 8):
             self.tree_com.setColumnWidth(pos, 55)
         self.tree_com.setColumnWidth(8, 110)
-        for pos in range(9, 13):
+        for pos in range(9, 14):
             self.tree_com.setColumnWidth(pos, 55)
 
         self.port_frame = port_frame(30, self.jsq_tcb, self.s_lcd_buf, self.r_lcd_buf)
@@ -307,7 +307,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         box.addLayout(k_hbox)
 
         self.setLayout(box)
-        self.resize(750, 900 )
+        self.resize(805, 900 )
         self.port_button.clicked.connect(self.btn_event_callback)
         self.usb_bt.clicked.connect(self.btn_event_callback)
         self.clr_bt.clicked.connect(self.btn_event_callback)
@@ -344,6 +344,8 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         # 创建 USB 数据解析进程，USB 发送数据进程
         self.usb_rbuf_process = QProcessNoStop(self.usb_rcmd_process)
         self.usb_sbuf_process = QProcessNoStop(self.usb_scmd_process)
+        self.usb_rbuf_process.start()
+        self.usb_sbuf_process.start()
         self.hidConnected.connect( self.on_connected )
 
     def on_connected(self, my_hid, event_str):
@@ -355,9 +357,8 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
                     self.jsq_tcb["connected"] = 1
                 else:
                     self.jsq_tcb["connected"] = self.jsq_tcb["connected"] + 1
-                self.usb_rbuf_process.start()
-                self.usb_sbuf_process.start()
-                self.hid_device.set_raw_data_handler(self.usb_rev_to_buf)
+
+                self.hid_device.set_raw_data_handler(self.usb_rev_hook)
                 self.report = self.hid_device.find_output_reports()
                 self.alive = True
                 self.dev_pro = dtq_xes_ht46(self.r_lcd_hook, self.usb_snd_hook)
@@ -365,8 +366,6 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
                 msg = self.dev_pro.get_check_wl_msg()
                 self.usb_snd_hook(msg)
             else:
-                self.usb_rbuf_process.quit()
-                self.usb_sbuf_process.quit()
                 self.alive = False
                 self.led.set_color("gray")
 
@@ -386,10 +385,11 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
                     self.qtree_dict[uid].setText(6, str(tmp_uid.send_cnt))
                     self.qtree_dict[uid].setText(7, str(tmp_uid.echo_cnt))
                     self.qtree_dict[uid].setText(8, str(tmp_uid.ans_str))
-                    self.qtree_dict[uid].setText(9, str(tmp_uid.answer_cnt))
-                    self.qtree_dict[uid].setText(10, str(tmp_uid.card_cnt))
-                    self.qtree_dict[uid].setText(11, str(tmp_uid.power_cnt))
-                    self.qtree_dict[uid].setText(12, str(tmp_uid.pac_cnt))
+                    self.qtree_dict[uid].setText(9, str(tmp_uid.answer_cnt_s0))
+                    self.qtree_dict[uid].setText(10, str(tmp_uid.answer_cnt))
+                    self.qtree_dict[uid].setText(11, str(tmp_uid.card_cnt))
+                    self.qtree_dict[uid].setText(12, str(tmp_uid.power_cnt))
+                    self.qtree_dict[uid].setText(13, str(tmp_uid.pac_cnt))
             # 刷新统计信息
             self.sum_sedit.setText(str(self.dev_pro.sum_scnt))
             self.sum_redit.setText(str(self.dev_pro.sum_rcnt))
@@ -458,6 +458,8 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
                         self.usb_snd_hook(msg)
                         return
                 else:
+                    self.r_browser.clear()
+                    self.s_browser.clear()
                     self.usb_dfu_timer.stop()
 
             # 切换定时器
@@ -486,14 +488,13 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
     * Description : HID 底层发送数据函数
     * Input       : msg
     '''
-    def usb_snd_hook(self, msg):
-        if self.alive:
-            # 复制指令码到发送数组
-            self.scmd_buf.put(msg)
-            # debug_str = "S: "
-            # for item in data:
-            #    debug_str += " %02X" % (item)
-            # print debug_str
+    def usb_snd_hook(self, smsg):
+        # 复制指令码到发送数组
+        self.scmd_buf.put(smsg)
+        # debug_str = "S: "
+        # for item in smsg:
+        #    debug_str += " %02X" % (item)
+        # print debug_str
 
     '''
     * Fun Name    : usb_scmd_process
@@ -522,17 +523,16 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
                     logging.debug(r_cmd)
 
     '''
-    * Fun Name    : usb_rev_to_buf
+    * Fun Name    : usb_rev_hook
     * Description : HID USB 接收数据钩子函数
     * Input       : data
     '''
-    def usb_rev_to_buf(self, data):
-        if self.alive:
-            self.rcmd_buf.put(data)
-            # debug_str = "R: "
-            # for item in data:
-            #    debug_str += " %02X" % (item)
-            # print debug_str
+    def usb_rev_hook(self, rcmd):
+        self.rcmd_buf.put(rcmd)
+        # debug_str = "R: "
+        # for item in rcmd:
+        #    debug_str += " %02X" % (item)
+        # print debug_str
 
     '''
     * Fun Name    : usb_rcmd_process
@@ -738,5 +738,7 @@ if __name__=='__main__':
         datburner.usb_snd_hook( msg )
         while not datburner.scmd_buf.empty():
             time.sleep(10)
+        datburner.usb_rbuf_process.quit()
+        datburner.usb_sbuf_process.quit()
         
 

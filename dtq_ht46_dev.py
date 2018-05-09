@@ -497,14 +497,16 @@ class dtq_xes_ht46():
             dtq.answer_cnt = 1
         dtq.answer_cnt_s1 = dtq.send_cnt - dtq.answer_cnt_s0
         # 返回回显
-        self.sum_rcnt = 0
-        self.sum_scnt = 0
-        self.lost_rate = 100
+        sum_rcnt = 0
+        sum_scnt = 0
         for tmp_uid in self.dtqdict:
             if tmp_uid:
-                self.sum_rcnt = self.sum_rcnt + self.dtqdict[tmp_uid].answer_cnt
-                self.sum_scnt = self.sum_scnt + self.dtqdict[tmp_uid].answer_cnt_s1
-        self.lost_rate = self.sum_rcnt*100.0/self.sum_scnt
+                sum_rcnt = sum_rcnt + self.dtqdict[tmp_uid].answer_cnt
+                sum_scnt = sum_scnt + self.dtqdict[tmp_uid].answer_cnt_s1
+        lost_rate = sum_rcnt*100.0/sum_scnt
+        self.sum_rcnt = sum_rcnt
+        self.sum_scnt = sum_scnt     
+        self.lost_rate = lost_rate
         cur_msg  = u"[ %s ]: %7d " % ("AN", dtq.answer_cnt)
         cur_msg += " "*16
         cur_msg += u"[ RA ]: %3.3f" % (self.lost_rate)
