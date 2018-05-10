@@ -91,18 +91,17 @@ class dtq_tcb():
             self.rev_state = 1
         else:
             if self.rev_state == 1:
-                if pac_num == (self.curpos+1):
-                    self.pac_cnt = self.pac_cnt + 1
-                    wr_data = bytearray(pac_msg)
-                    if not self.f_handle:
-                        self.f_path = os.path.abspath("./") + '/VOICE/%s' % (self.f_name)
-                        self.f_handle = open(self.f_path, 'wb')
-                    self.f_handle.write(wr_data)
-                    self.cntsize += 208
-                    if self.mp3_format_check(pac_msg) == False:
-                        self.format_err += "[ %3d ]" % pac_num
-                else:
-                    for item in range(self.curpos, pac_num):
+                self.pac_cnt = self.pac_cnt + 1
+                wr_data = bytearray(pac_msg)
+                if not self.f_handle:
+                    self.f_path = os.path.abspath("./") + '/VOICE/%s' % (self.f_name)
+                    self.f_handle = open(self.f_path, 'wb')
+                self.f_handle.write(wr_data)
+                self.cntsize += 208
+                if self.mp3_format_check(pac_msg) == False:
+                    self.format_err += "[ %3d ]" % pac_num
+                if pac_num != (self.curpos+1):
+                    for item in range(self.curpos+1, pac_num):
                         self.msg_str += "[ %3d ]" % item
             if pac_flg == 1:
                 self.stop_pos = pac_num
