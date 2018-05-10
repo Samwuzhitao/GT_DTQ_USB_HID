@@ -31,6 +31,7 @@ class dtq_tcb():
         self.format_err = ""
         self.cntsize = 0
         self.rev_state = 0
+        self.vo_rate = "0"
         # SEQ 管理
         self.rev_seq = 0
         self.send_seq = 0
@@ -55,18 +56,47 @@ class dtq_tcb():
     def seq_add(self):
         self.send_seq = self.send_seq + 1
 
-    # 播放测试
-    def play(self):
-        self.player = mp3play.load(self.f_path)
-        self.player.play()
-        # print u"[ %010u ]:播放测试 :%s！" % (self.devid, self.f_name)
-
     # MP3 格式检测
     def mp3_format_check(self, pac_msg):
         if pac_msg[0] == 0xFF and pac_msg[1] == 0xFB:
             return True
         else:
             return False
+
+    def mp3_to_txt_output(self):
+        voice0_name = os.path.abspath("./") + '/VOICE/%s' % (self.f_name)
+        txt_file = os.path.abspath("./") + '\\%s.txt' % (self.f_name)
+        fil0_size = int(os.path.getsize(voice0_name))
+        print "FILE:%s \r\n\tSIZE:%d" % (voice0_name, fil0_size)
+        f0 = open(voice0_name, 'rb')
+        f1 = open(txt_file, 'w')
+        rd_pos = 0
+        while(rd_pos < fil0_size):
+            f0.seek(rd_pos,0)
+            size = 0
+            if (fil0_size - rd_pos) > 208:
+                size = 208
+            else:
+                size = fil0_size - rd_pos
+            rd0_data = f0.read(size)
+            # 读回数据输出
+            rd0_str = ""
+            i = 0
+            for rd_item in rd0_data:
+                i = i + 1
+                if i < 6:
+                    rd0_str += " %02X" % (ord(rd_item))
+            rd_pos = rd_pos + size
+            print rd0_str
+            f1.write(rd0_str)
+        f0.close()
+        f1.close()
+
+    # 播放测试
+    def play(self):
+        self.player = mp3play.load(self.f_path)
+        self.player.play()
+        # print u"[ %010u ]:播放测试 :%s！" % (self.devid, self.f_name)
 
     # 打印提示信息
     def decode_porcess(self, r_lcd, pac_flg, pac_num, pac_msg):
@@ -109,8 +139,9 @@ class dtq_tcb():
                 if self.f_handle:
                     self.f_handle.close()
                 self.rev_state = 0
-                msg_str = u"[ %010u ]:数据记录 文件大小: [ %d ], 发送数据包: [ %d ], 接收数据包: [ %d ]！\r\n" % \
-                    (self.devid, self.cntsize, self.stop_pos+1-self.start_pos, self.pac_cnt)
+                self.vo_rate = "%3.3f" % (100.0 - (self.pac_cnt * 100.0 / (self.stop_pos+1-self.start_pos)))
+                msg_str = u"[ %010u ]:数据记录 文件大小: [ %d ], 发送数据包: [ %d ], 接收数据包: [ %d ], 丢包率：[ %s ]\r\n" % \
+                    (self.devid, self.cntsize, self.stop_pos+1-self.start_pos, self.pac_cnt, self.vo_rate)
                 if self.msg_str:
                     self.msg_str = msg_str + u"丢包统计：\r\n" + self.msg_str + "\r\n"
                 else:
@@ -119,6 +150,7 @@ class dtq_tcb():
                 if self.format_err:
                     self.msg_str += self.format_err + "\r\n"
                 r_lcd(self.msg_str)
+                return True
             else:
                 self.curpos = pac_num
 
@@ -541,7 +573,13 @@ class dtq_xes_ht46():
         # print debug_str
         rpos = rpos + 208   # PAC_VOICE
         # print msg[rpos:]
-        dtq.decode_porcess(self.r_lcd, pac_flg, pac_num, pac_msg)
+        err = dtq.decode_porcess(self.r_lcd, pac_flg, pac_num, pac_msg)
+        if err:
+            cur_msg = u"[ VO_S ]: %5d " % (dtq.stop_pos+1-dtq.start_pos)
+            cur_msg += u"[ VO_R ]: %5d " % dtq.pac_cnt
+            cur_msg += u"[ RA ]: %s " % dtq.vo_rate
+            s_msg = self.get_echo_cmd_msg(dtq.devid, cur_msg)
+            self.usb_snd(s_msg)
         return 
 
    # 上报刷卡格式解析

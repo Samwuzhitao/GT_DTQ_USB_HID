@@ -8,7 +8,7 @@ import serial
 import string
 from PySide.QtCore import *
 from PySide.QtGui  import *
-from dtq_monitor_dev import *
+from drv_dtq_monitor import *
 
 class ComMonitor(QThread):
     def __init__(self, port, com, r_buf, parent=None):

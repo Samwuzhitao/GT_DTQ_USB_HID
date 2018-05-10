@@ -14,8 +14,8 @@ import json
 from PySide.QtCore import *
 from PySide.QtGui import *
 from led import *
-from dtq_monitor_dev import *
-from dtq_ht46_dev  import *
+from drv_dtq_monitor import *
+from drv_dtq_ht46  import *
 from com_monitor  import *
 
 class port_frame(QFrame):

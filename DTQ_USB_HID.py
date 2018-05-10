@@ -17,7 +17,7 @@ import serial
 from qprocess import *
 from file_transfer import *
 import logging
-from dtq_ht46_dev import *
+from drv_dtq_ht46 import *
 from port_frame import *
 import cProfile
 
@@ -116,7 +116,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         # 升级协议
         self.dfu_pro = None
 
-        self.setWindowTitle(u"USB HID调试工具v2.1.0")
+        self.setWindowTitle(u"USB HID调试工具v2.1.1")
         self.connect_label = QLabel(u"连接状态:")
         self.connect_label.setFixedWidth(60)
         self.led = LED(30)
@@ -276,10 +276,10 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
 
         self.tree_com = QTreeWidget()
         self.tree_com.setFont(QFont(u"答题器数据统计", 8, False))
-        self.tree_com.setColumnCount(14)
+        self.tree_com.setColumnCount(15)
         self.tree_com.setHeaderLabels([u'序号', u'uID', u'RSSI', u'电量', 
-            u'按压次数', u'按键次数', u'发送次数', u'回显次数',u'答案',
-            u'AN_S0', u'AN_CNT', u'CA_CNT',u'PO_CNT',u'VO_CNT'])
+            u'按压次数', u'按键次数', u'发送次数', u'回显次数', u'答案',
+            u'AN_S0', u'AN_CNT', u'CA_CNT', u'PO_CNT', u'VO_CNT', u'VO_RATE'])
         self.tree_com.setColumnWidth(0, 40)
         self.tree_com.setColumnWidth(1, 70)
         self.tree_com.setColumnWidth(2, 35)
@@ -287,7 +287,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         for pos in range(4, 8):
             self.tree_com.setColumnWidth(pos, 55)
         self.tree_com.setColumnWidth(8, 110)
-        for pos in range(9, 14):
+        for pos in range(9, 15):
             self.tree_com.setColumnWidth(pos, 55)
 
         self.port_frame = port_frame(30, self.jsq_tcb, self.lcd_buf, self.lcd_buf)
@@ -306,7 +306,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         box.addLayout(k_hbox)
 
         self.setLayout(box)
-        self.resize(805, 900 )
+        self.resize(860, 900 )
         self.usb_bt.clicked.connect(self.btn_event_callback)
         self.clr_bt.clicked.connect(self.btn_event_callback)
         self.ser_bt.clicked.connect(self.btn_event_callback)
@@ -537,6 +537,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
                     self.qtree_dict[uid].setText(11, str(tmp_uid.card_cnt))
                     self.qtree_dict[uid].setText(12, str(tmp_uid.power_cnt))
                     self.qtree_dict[uid].setText(13, str(tmp_uid.pac_cnt))
+                    self.qtree_dict[uid].setText(14, tmp_uid.vo_rate)
             # 刷新统计信息
             self.sum_sedit.setText(str(self.dev_pro.sum_scnt))
             self.sum_redit.setText(str(self.dev_pro.sum_rcnt))
