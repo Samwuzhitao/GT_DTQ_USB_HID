@@ -151,7 +151,7 @@ class dtq_xes_ht46():
             "BIND_START": 0x15,
             "BIND_INFO": 0x16,
             "BIND_STOP": 0x17,
-            "POWER":0x18,
+            "POWER": 0x18,
             "RESET_PORT": 0x20,
             "CHECK_WL": 0x21
         }
@@ -499,11 +499,11 @@ class dtq_xes_ht46():
                 if item > 0 and item < 8:
                     dtq.ans_str += "%s" % self.answer_code[item]
         # 计数检测
-        # print dtq.answer_cnt_s1,dtq.send_cnt,dtq.answer_cnt_s0
-        dtq.answer_cnt = dtq.answer_cnt + 1
         if dtq.send_cnt < dtq.answer_cnt_s0 or dtq.send_cnt == 0 or dtq.answer_cnt_s0 == 0 or dtq.answer_cnt > dtq.send_cnt:
             dtq.answer_cnt_s0 = dtq.send_cnt
-            dtq.answer_cnt = 1
+            dtq.answer_cnt = 0
+        dtq.answer_cnt = dtq.answer_cnt + 1
+        # print dtq.answer_cnt_s1,dtq.answer_cnt_s0,dtq.answer_cnt
         dtq.answer_cnt_s1 = dtq.send_cnt - dtq.answer_cnt_s0 + 1
         # 返回回显
         sum_rcnt = 0
@@ -583,10 +583,12 @@ class dtq_xes_ht46():
         dev_id = self.uid_neg_code(msg[rpos:rpos+4])
         rpos = rpos + 4
         sf_version = "v%d.%d.%d" % (msg[rpos], msg[rpos+1], msg[rpos+2])
+        jsq_tcb["version"] = sf_version
         rpos = rpos + 3   # SF_VERSION
         rpos = rpos + 15  # HW_VERSION
         rpos = rpos + 8   # COMPLANY
         rf_ch = msg[rpos:rpos+1][0]
+        jsq_tcb["new_rch"] = rf_ch
         rpos = rpos + 1   # RF_CH
         tx_power = msg[rpos:rpos+1][0]
         # 返回处理结果

@@ -106,6 +106,10 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         self.dtq_cnt_dict = {}
         self.mp3_player_dict = {}
         self.jsq_tcb = {}
+        self.jsq_tcb["connected"] = 0
+        self.jsq_tcb["version"] = "v0.1.00"
+        self.jsq_tcb["old_rch"] = 0
+        self.jsq_tcb["new_rch"] = 0
         # USB 设备管理
         self.alive = False
         # 答题协议
@@ -113,7 +117,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         # 升级协议
         self.dfu_pro = None
 
-        self.setWindowTitle(u"USB HID调试工具v2.0.15")
+        self.setWindowTitle(u"USB HID调试工具v2.1.0")
         self.connect_label = QLabel(u"连接状态:")
         self.connect_label.setFixedWidth(60)
         self.led = LED(30)
@@ -130,33 +134,33 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         e_hbox.addWidget(self.pp_test_button)
         e_hbox.addWidget(self.clr_bt)
 
-        self.ch_label = QLabel(u"设置信道：")
+        self.conf_label = QLabel(u"配置功能：")
+        self.ch_label = QLabel(u'rCH：')
         self.ch_lineedit = QLineEdit(u'1')
-        self.ch_button = QPushButton(u"修改信道")
+        self.ch_lineedit.setFixedWidth(135)
+        self.ch_button = QPushButton(u"同步信道")
+        self.version_label = QLabel(u'VERSION：')
+        self.version_edit = QLineEdit(u'v0.1.00')
         self.bind_button = QPushButton(u"开始绑定")
         self.check_conf_button = QPushButton(u"查看配置")
         self.clear_conf_button = QPushButton(u"清除配置")
         self.check_wl_button = QPushButton(u"查看白名单")
-        self.port_combo = QComboBox(self)
-        self.port_combo.addItems([u"PORT:0", u"PORT:1",
-            u"PORT:2", u"PORT:3", u"PORT:4"])
-        self.port_button = QPushButton(u"复位端口")
         c_hbox = QHBoxLayout()
+        c_hbox.addWidget(self.conf_label)
         c_hbox.addWidget(self.ch_label)
         c_hbox.addWidget(self.ch_lineedit)
+        c_hbox.addWidget(self.version_label)
+        c_hbox.addWidget(self.version_edit)
         c_hbox.addWidget(self.ch_button)
         c_hbox.addWidget(self.bind_button)
         c_hbox.addWidget(self.check_conf_button)
         c_hbox.addWidget(self.clear_conf_button)
         c_hbox.addWidget(self.check_wl_button)
-        c_hbox.addWidget(self.port_combo)
-        c_hbox.addWidget(self.port_button)
 
         s_hbox = QHBoxLayout()
         self.ctl_label = QLabel(u"状态控制：")
         self.devid_label = QLabel(u"uID：")
         self.devid_lineedit = QLineEdit()
-        self.devid_lineedit.setFixedWidth(135)
         self.led_label = QLabel(u"指示灯：")
         self.led_color_combo = QComboBox(self)
         self.led_color_combo.addItems([u"红:0x01", u"绿:0x02", u"蓝:0x03", u"黄:0x04",u"紫:0x05",u"青:0x06",u"白:0x07"])
@@ -212,7 +216,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         k_hbox.addWidget(self.sum_rate_label)
         k_hbox.addWidget(self.sum_rate_edit)
 
-        debug_hbox = QHBoxLayout()
+        d_hbox = QHBoxLayout()
         self.debug_label = QLabel(u"性能监测：")
         self.usb_r_sum_label = QLabel(u"USBR：")
         self.usb_r_sum_sedit = QLineEdit(u'0')
@@ -223,15 +227,15 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         self.connect_label = QLabel(u"CONNECT：")
         self.connect_edit = QLineEdit(u'0')
  
-        debug_hbox.addWidget(self.debug_label)
-        debug_hbox.addWidget(self.usb_r_sum_label)
-        debug_hbox.addWidget(self.usb_r_sum_sedit)
-        debug_hbox.addWidget(self.usb_s_sum_label)
-        debug_hbox.addWidget(self.usb_s_sum_redit)
-        debug_hbox.addWidget(self.lcd_r_label)
-        debug_hbox.addWidget(self.lcd_r_edit)
-        debug_hbox.addWidget(self.connect_label)
-        debug_hbox.addWidget(self.connect_edit)
+        d_hbox.addWidget(self.debug_label)
+        d_hbox.addWidget(self.usb_r_sum_label)
+        d_hbox.addWidget(self.usb_r_sum_sedit)
+        d_hbox.addWidget(self.usb_s_sum_label)
+        d_hbox.addWidget(self.usb_s_sum_redit)
+        d_hbox.addWidget(self.lcd_r_label)
+        d_hbox.addWidget(self.lcd_r_edit)
+        d_hbox.addWidget(self.connect_label)
+        d_hbox.addWidget(self.connect_edit)
 
         self.cmd_label = QLabel(u"回显功能：")
         self.echo_uid_label = QLabel(u"uID：")
@@ -300,7 +304,7 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
         box.addLayout(q_hbox)
         box.addLayout(s_hbox)
         box.addLayout(f_hbox)
-        box.addLayout(debug_hbox)
+        box.addLayout(d_hbox)
         box.addWidget(self.s_browser)
         box.addWidget(self.r_browser)
         box.addWidget(self.tree_com)
@@ -308,7 +312,6 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
 
         self.setLayout(box)
         self.resize(805, 900 )
-        self.port_button.clicked.connect(self.btn_event_callback)
         self.usb_bt.clicked.connect(self.btn_event_callback)
         self.clr_bt.clicked.connect(self.btn_event_callback)
         self.ser_bt.clicked.connect(self.btn_event_callback)
@@ -357,13 +360,14 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
                     self.jsq_tcb["connected"] = 1
                 else:
                     self.jsq_tcb["connected"] = self.jsq_tcb["connected"] + 1
-
                 self.hid_device.set_raw_data_handler(self.usb_rev_hook)
                 self.report = self.hid_device.find_output_reports()
                 self.alive = True
                 self.dev_pro = dtq_xes_ht46(self.r_lcd_hook, self.usb_snd_hook)
                 self.led.set_color("blue")
                 msg = self.dev_pro.get_check_wl_msg()
+                self.usb_snd_hook(msg)
+                msg = self.dev_pro.get_check_dev_info_msg()
                 self.usb_snd_hook(msg)
             else:
                 self.alive = False
@@ -421,6 +425,10 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
                 self.usb_s_sum_redit.setText(str(self.scmd_buf.qsize()))
                 self.lcd_r_edit.setText(str(self.r_lcd_buf.qsize()))
                 self.connect_edit.setText(str(self.jsq_tcb["connected"]))
+                self.version_edit.setText(self.jsq_tcb["version"])
+                if self.jsq_tcb["old_rch"] != self.jsq_tcb["new_rch"]:
+                    self.ch_lineedit.setText(str(self.jsq_tcb["new_rch"]))
+                    self.jsq_tcb["old_rch"] = self.jsq_tcb["new_rch"]
 
     # 单击获取设备ID
     def tree_1_clicked(self, item, column):
@@ -620,11 +628,11 @@ class dtq_hid_debuger(QWidget, hid_pnp_event):
                 self.s_lcd_buf.put(u"S: 复位端口 ")
                 return
 
-            if button_str == u"修改信道":
+            if button_str == u"同步信道":
                 ch = int(str(self.ch_lineedit.text()))
                 msg = self.dev_pro.get_set_rf_ch_msg(ch)
                 self.usb_snd_hook(msg)
-                self.s_lcd_buf.put(u"S: 修改信道 ")
+                self.s_lcd_buf.put(u"S: 同步信道 ")
                 return
 
             if button_str == u"停止绑定":
